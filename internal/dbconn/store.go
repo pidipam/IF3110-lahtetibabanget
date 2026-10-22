@@ -64,7 +64,6 @@ func (s *Store) Create(ctx context.Context, in Input) (*Connection, error) {
 	return c, nil
 }
 
-// Update mengubah koneksi. Password kosong berarti password lama dipertahankan.
 // panggil Manager.Invalidate(id) setelah berhasil
 func (s *Store) Update(ctx context.Context, id int64, in Input) (*Connection, error) {
 	in.Normalize()
@@ -88,7 +87,6 @@ func (s *Store) Update(ctx context.Context, id int64, in Input) (*Connection, er
 	return c, nil
 }
 
-// Delete menghapus koneksi. Grant ikut terhapus (ON DELETE CASCADE). 
 // panggil Manager.Invalidate(id) setelah berhasil
 func (s *Store) Delete(ctx context.Context, id int64) error {
 	tag, err := s.db.Exec(ctx, "DELETE FROM db_connections WHERE id = $1", id)
@@ -147,7 +145,7 @@ func (s *Store) ListByIDs(ctx context.Context, ids []int64) ([]*Connection, erro
 	return out, rows.Err()
 }
 
-// Hanya untuk Manager, jangan dikirim ke template atau log.
+// jangan dikirim ke template
 func (s *Store) Credentials(ctx context.Context, id int64) (Params, error) {
 	var p Params
 	var enc string
@@ -164,8 +162,6 @@ func (s *Store) Credentials(ctx context.Context, id int64) (Params, error) {
 	return p, nil
 }
 
-
-// password kosong -> ParamsForEdit 
 func ParamsFromInput(in Input) Params {
 	in.Normalize()
 	return Params{Host: in.Host, Port: in.Port, DBName: in.DBName, Username: in.Username, Password: in.Password, SSLMode: in.SSLMode}

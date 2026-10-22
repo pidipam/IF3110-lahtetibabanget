@@ -137,7 +137,6 @@ func TestWrap(t *testing.T) {
 }
 
 func TestManagerTestRespectsTimeout(t *testing.T) {
-	// tidak membalas handshake.
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)

@@ -30,7 +30,6 @@ type Connection struct {
 	UpdatedAt time.Time
 }
 
-// Input adalah data dari form admin. Password kosong saat update berarti dipertahankan.
 type Input struct {
 	Name     string
 	Host     string
@@ -41,7 +40,7 @@ type Input struct {
 	SSLMode  string
 }
 
-// Mengandung password, jangan dikirim ke template atau log.
+// jangan dikirim ke template atau log
 type Params struct {
 	Host     string
 	Port     int
@@ -50,8 +49,6 @@ type Params struct {
 	Password string
 	SSLMode  string
 }
-
-// String dan GoString menyembunyikan password 
 func (p Params) String() string {
 	return fmt.Sprintf("%s@%s:%d/%s", p.Username, p.Host, p.Port, p.DBName)
 }
