@@ -1,0 +1,70 @@
+{{define "content"}}
+{{$g := .Data.Group}}
+{{$csrf := .CSRF}}
+<div class="card">
+    <h1>Grup {{$g.Name}}</h1>
+    <form method="post" action="/admin/groups/{{$g.ID}}">
+        <input type="hidden" name="csrf_token" value="{{$csrf}}">
+        <label for="name">Nama</label>
+        <input type="text" id="name" name="name" value="{{$g.Name}}" required>
+        <label for="description">Deskripsi</label>
+        <input type="text" id="description" name="description" value="{{$g.Description}}">
+        <p>
+            <button type="submit">Simpan</button>
+            <a class="btn secondary" href="/admin/groups">Kembali</a>
+        </p>
+    </form>
+</div>
+<div class="card">
+    <h2>Anggota</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Username</th>
+                <th>Status</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Data.Members}}
+                <tr>
+                    <td>{{.Username}}</td>
+                    <td>{{if .IsActive}}Aktif{{else}}<span class="badge off">Nonaktif</span>{{end}}</td>
+                    <td>
+                        <form class="inline" method="post" action="/admin/groups/{{$g.ID}}/members/{{.ID}}/delete">
+                            <input type="hidden" name="csrf_token" value="{{$csrf}}">
+                            <button type="submit" class="danger">Keluarkan</button>
+                        </form>
+                    </td>
+                </tr>
+            {{else}}
+                <tr>
+                    <td colspan="3" class="muted">Belum ada anggota.</td>
+                </tr>
+            {{end}}
+        </tbody>
+    </table>
+    {{with .Data.NonMembers}}
+        <form method="post" action="/admin/groups/{{$g.ID}}/members">
+            <input type="hidden" name="csrf_token" value="{{$csrf}}">
+            <label for="user_id">Tambah anggota</label>
+            <div class="row">
+                <select id="user_id" name="user_id">
+                    {{range .}}
+                        <option value="{{.ID}}">{{.Username}}</option>
+                    {{end}}
+                </select>
+                <button type="submit">Tambah</button>
+            </div>
+        </form>
+    {{end}}
+</div>
+<div class="card">
+    <h2>Hapus Grup</h2>
+    <p class="muted">Semua anggota akan kehilangan akses database dari grup ini dan sesinya diakhiri.</p>
+    <form method="post" action="/admin/groups/{{$g.ID}}/delete">
+        <input type="hidden" name="csrf_token" value="{{$csrf}}">
+        <button type="submit" class="danger">Hapus grup</button>
+    </form>
+</div>
+{{end}}
