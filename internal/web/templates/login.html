@@ -1,0 +1,17 @@
+{{define "content"}}
+<section class="hero">
+    <h1>Kelola Database Bersama dengan Tenang</h1>
+    <p>Akses diatur per grup, perubahan schema tercatat, dan setiap migration bisa ditelusuri kembali.</p>
+</section>
+<div class="card narrow">
+    <h2>Masuk ke akun Anda</h2>
+    <form method="post" action="/login">
+        <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" value="{{with .Data}}{{.Username}}{{end}}" autocomplete="username" required autofocus>
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" autocomplete="current-password" required>
+        <p><button type="submit">Masuk</button></p>
+    </form>
+</div>
+{{end}}
