@@ -1,0 +1,45 @@
+{{define "content"}}
+{{$t := .Data.Target}}
+<div class="card">
+    <h1>Edit User {{$t.Username}}</h1>
+    <form method="post" action="/admin/users/{{$t.ID}}">
+        <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" value="{{$t.Username}}" required>
+        <label class="check">
+            <input type="checkbox" name="is_admin"{{if $t.IsAdmin}} checked{{end}}>
+            Platform Admin
+        </label>
+        <label class="check">
+            <input type="checkbox" name="is_active"{{if $t.IsActive}} checked{{end}}>
+            Aktif
+        </label>
+        <p class="muted">Menonaktifkan user atau mencabut hak admin akan langsung mengakhiri semua sesinya.</p>
+        <p>
+            <button type="submit">Simpan perubahan</button>
+            <a class="btn secondary" href="/admin/users">Kembali</a>
+        </p>
+    </form>
+</div>
+<div class="card">
+    <h2>Reset Password</h2>
+    <form method="post" action="/admin/users/{{$t.ID}}/password">
+        <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+        <label for="password">Password baru</label>
+        <input type="password" id="password" name="password" autocomplete="new-password" required>
+        <p><button type="submit" class="secondary">Reset password</button></p>
+    </form>
+</div>
+<div class="card">
+    <h2>Grup</h2>
+    {{with .Data.Groups}}
+        <ul>
+            {{range .}}
+                <li><a href="/admin/groups/{{.ID}}">{{.Name}}</a></li>
+            {{end}}
+        </ul>
+    {{else}}
+        <p class="muted">User ini belum tergabung di grup mana pun.</p>
+    {{end}}
+</div>
+{{end}}

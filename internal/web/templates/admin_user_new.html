@@ -1,0 +1,20 @@
+{{define "content"}}
+<div class="card">
+    <h1>Tambah User</h1>
+    <form method="post" action="/admin/users">
+        <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" value="{{.Data.Username}}" required>
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" autocomplete="new-password" required>
+        <label class="check">
+            <input type="checkbox" name="is_admin"{{if .Data.IsAdmin}} checked{{end}}>
+            Jadikan Platform Admin
+        </label>
+        <p>
+            <button type="submit">Simpan</button>
+            <a class="btn secondary" href="/admin/users">Batal</a>
+        </p>
+    </form>
+</div>
+{{end}}
