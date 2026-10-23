@@ -11,8 +11,9 @@ CREATE TABLE db_connections (
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- group_db_access.db_id dibuat A tanpa foreign key karena tabel koneksi belum ada.
--- Grant ikut terhapus saat koneksi dihapus.
+-- sementara
+DELETE FROM group_db_access;
+
 ALTER TABLE group_db_access
 	ADD CONSTRAINT group_db_access_db_id_fkey
 	FOREIGN KEY (db_id) REFERENCES db_connections(id) ON DELETE CASCADE;
