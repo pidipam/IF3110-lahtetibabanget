@@ -22,7 +22,7 @@ type GrantRepo interface {
 	Remove(ctx context.Context, groupID, connID int64) (authz.Level, error)
 }
 
-// dipenuhi oleh *auth.SessionStore
+// diisi oleh *auth.SessionStore
 type SessionNotifier interface {
 	MarkRotateGroup(ctx context.Context, groupID int64) error
 	RevokeGroup(ctx context.Context, groupID int64) error

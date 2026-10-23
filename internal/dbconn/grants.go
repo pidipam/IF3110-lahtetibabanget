@@ -10,7 +10,7 @@ import (
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/authz"
 )
 
-// GrantStore membaca dan menulis tabel group_db_access (dibuat A, dikelola di sini).
+// membaca dan menulis tabel group_db_access 
 type GrantStore struct {
 	db *pgxpool.Pool
 }

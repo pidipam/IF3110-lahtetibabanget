@@ -10,8 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// menentukan apakah err adalah masalah koneksi ke target dan jenisnya.
-// Error SQL biasa (misalnya syntax error, constraint) bukan masalah koneksi.
 func classify(err error) (Kind, bool) {
 	if err == nil || errors.Is(err, context.Canceled) {
 		return KindOther, false
@@ -56,7 +54,6 @@ func classify(err error) (Kind, bool) {
 	return KindOther, false
 }
 
-// Wrap mengubah error koneksi menjadi *ConnError. Error lain dikembalikan apa adanya.
 func Wrap(err error) error {
 	if err == nil {
 		return nil
@@ -71,7 +68,6 @@ func Wrap(err error) error {
 	return err
 }
 
-// true jika err berasal dari kegagalan koneksi.
 func AsConnError(err error) (*ConnError, bool) {
 	var ce *ConnError
 	if errors.As(err, &ce) {
