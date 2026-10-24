@@ -60,6 +60,11 @@
     {{end}}
 </div>
 <div class="card">
+    <h2>Akses Database</h2>
+    <p class="muted">Atur database mana yang dapat diakses grup ini dan levelnya.</p>
+    <a class="btn secondary" href="/admin/groups/{{$g.ID}}/access">Akses database</a>
+</div>
+<div class="card">
     <h2>Hapus Grup</h2>
     <p class="muted">Semua anggota akan kehilangan akses database dari grup ini dan sesinya diakhiri.</p>
     <form method="post" action="/admin/groups/{{$g.ID}}/delete">

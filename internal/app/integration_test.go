@@ -4,13 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -18,14 +15,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/auth"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/authz"
-	"github.com/pidipam/IF3110-lahtetibabanget/internal/platformdb"
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/testutil"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/users"
-	"golang.org/x/crypto/bcrypt"
 )
 
 var testSession = auth.SessionConfig{IdleTimeout: 30 * time.Minute, AbsoluteTimeout: 8 * time.Hour, RotateInterval: 15 * time.Minute, GracePeriod: 30 * time.Second}
-
-var csrfPattern = regexp.MustCompile(`name="csrf_token" value="([^"]+)"`)
 
 type testEnv struct {
 	t *testing.T
@@ -41,25 +35,9 @@ func setup(t *testing.T) *testEnv {
 
 func setupWith(t *testing.T, secure bool) *testEnv {
 	t.Helper()
-	dsn := os.Getenv("TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("TEST_DATABASE_URL belum diisi, integration test dilewati")
-	}
-	auth.BcryptCost = bcrypt.MinCost
-	ctx := context.Background()
-	db, err := platformdb.Connect(ctx, dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(db.Close)
-	if err := platformdb.Migrate(ctx, db); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(ctx, "TRUNCATE users, groups, group_members, sessions, group_db_access RESTART IDENTITY CASCADE"); err != nil {
-		t.Fatal(err)
-	}
+	db := testutil.NewTestDB(t)
 	env := &testEnv{t: t, db: db, now: time.Date(2026, 10, 22, 9, 0, 0, 0, time.UTC), log: &bytes.Buffer{}}
-	a, err := New(Options{DB: db, Session: testSession, Secure: secure, Logger: slog.New(slog.NewTextHandler(env.log, nil))})
+	a, err := New(Options{DB: db, Session: testSession, Secure: secure, Logger: slog.New(slog.NewTextHandler(env.log, nil)), EncryptionKey: testutil.TestKey})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,85 +65,42 @@ func (e *testEnv) createUser(username, password string, admin bool) *users.User 
 
 func (e *testEnv) count(query string, args ...any) int {
 	e.t.Helper()
-	var n int
-	if err := e.db.QueryRow(context.Background(), query, args...).Scan(&n); err != nil {
-		e.t.Fatal(err)
-	}
-	return n
+	return testutil.Count(e.t, e.db, query, args...)
 }
 
 type client struct {
-	e *testEnv
+	c       *testutil.Client
 	cookies map[string]string
-	csrf string
 }
 
 func (e *testEnv) client() *client {
-	return &client{e: e, cookies: map[string]string{}}
+	c := testutil.NewClient(e.t, e.app)
+	return &client{c: c, cookies: c.Cookies}
 }
 
 func (c *client) do(method, path string, form url.Values) *httptest.ResponseRecorder {
-	var body io.Reader
-	if form != nil {
-		body = strings.NewReader(form.Encode())
-	}
-	r := httptest.NewRequest(method, path, body)
-	if form != nil {
-		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	}
-	for name, value := range c.cookies {
-		r.AddCookie(&http.Cookie{Name: name, Value: value})
-	}
-	w := httptest.NewRecorder()
-	c.e.app.ServeHTTP(w, r)
-	for _, ck := range w.Result().Cookies() {
-		if ck.MaxAge < 0 || ck.Value == "" {
-			delete(c.cookies, ck.Name)
-		} else {
-			c.cookies[ck.Name] = ck.Value
-		}
-	}
-	if m := csrfPattern.FindStringSubmatch(w.Body.String()); m != nil {
-		c.csrf = m[1]
-	}
-	return w
+	return c.c.Do(method, path, form)
 }
 
 func (c *client) post(path string, form url.Values) *httptest.ResponseRecorder {
-	if form == nil {
-		form = url.Values{}
-	}
-	form.Set(auth.CSRFField, c.csrf)
-	return c.do("POST", path, form)
+	return c.c.Post(path, form)
 }
 
 func (c *client) login(username, password string) *httptest.ResponseRecorder {
-	c.do("GET", "/login", nil)
-	w := c.post("/login", url.Values{"username": {username}, "password": {password}})
-	if w.Code == http.StatusSeeOther {
-		c.do("GET", "/", nil)
-	}
-	return w
+	return c.c.Login(username, password)
 }
 
 func (c *client) session() string {
-	return c.cookies[auth.SessionCookie]
+	return c.c.Session()
 }
 
 func expectStatus(t *testing.T, w *httptest.ResponseRecorder, want int) {
 	t.Helper()
-	if w.Code != want {
-		t.Fatalf("status %d, want %d, body: %s", w.Code, want, w.Body.String())
-	}
+	testutil.ExpectStatus(t, w, want)
 }
 
 func sessionSetCookie(w *httptest.ResponseRecorder) string {
-	for _, h := range w.Result().Header.Values("Set-Cookie") {
-		if strings.HasPrefix(h, auth.SessionCookie+"=") {
-			return h
-		}
-	}
-	return ""
+	return testutil.SessionSetCookie(w)
 }
 
 func TestLoginSuccessSetsSecureSessionCookie(t *testing.T) {
@@ -524,26 +459,31 @@ func TestEffectiveAccessFromDatabase(t *testing.T) {
 	editors, _ := e.app.Users.CreateGroup(ctx, "editors", "")
 	e.app.Users.AddMember(ctx, viewers.ID, alice.ID)
 	e.app.Users.AddMember(ctx, editors.ID, alice.ID)
-	e.db.Exec(ctx, "INSERT INTO group_db_access (group_id, db_id, level) VALUES ($1, 1, 'view'), ($2, 1, 'edit'), ($1, 2, 'view')", viewers.ID, editors.ID)
+	db1 := testutil.SeedConnection(t, e.db).ID
+	db2 := testutil.SeedConnection(t, e.db).ID
+	db3 := testutil.SeedConnection(t, e.db).ID
+	if _, err := e.db.Exec(ctx, "INSERT INTO group_db_access (group_id, db_id, level) VALUES ($1, $3, 'view'), ($2, $3, 'edit'), ($1, $4, 'view')", viewers.ID, editors.ID, db1, db2); err != nil {
+		t.Fatal(err)
+	}
 	p := authz.Principal{UserID: alice.ID}
-	if err := e.app.Authz.Can(ctx, p, 1, authz.EditMigration); err != nil {
+	if err := e.app.Authz.Can(ctx, p, db1, authz.EditMigration); err != nil {
 		t.Fatalf("db 1 harus View + Edit (level tertinggi): %v", err)
 	}
-	if err := e.app.Authz.Can(ctx, p, 2, authz.ViewDatabase); err != nil {
+	if err := e.app.Authz.Can(ctx, p, db2, authz.ViewDatabase); err != nil {
 		t.Fatalf("db 2 harus bisa dilihat: %v", err)
 	}
-	if err := e.app.Authz.Can(ctx, p, 2, authz.EditMigration); err != authz.ErrForbidden {
+	if err := e.app.Authz.Can(ctx, p, db2, authz.EditMigration); err != authz.ErrForbidden {
 		t.Fatalf("db 2 hanya View Only, got %v", err)
 	}
-	if err := e.app.Authz.Can(ctx, p, 3, authz.ViewDatabase); err != authz.ErrForbidden {
+	if err := e.app.Authz.Can(ctx, p, db3, authz.ViewDatabase); err != authz.ErrForbidden {
 		t.Fatalf("db 3 tanpa akses, got %v", err)
 	}
 	dbs, err := e.app.Authz.AccessibleDatabases(ctx, p)
-	if err != nil || len(dbs) != 2 || dbs[1] != authz.LevelEdit {
+	if err != nil || len(dbs) != 2 || dbs[db1] != authz.LevelEdit {
 		t.Fatalf("AccessibleDatabases salah: %v %v", dbs, err)
 	}
 	e.app.Users.Update(ctx, alice.ID, "alice", false, false)
-	if err := e.app.Authz.Can(ctx, p, 1, authz.ViewDatabase); err != authz.ErrForbidden {
+	if err := e.app.Authz.Can(ctx, p, db1, authz.ViewDatabase); err != authz.ErrForbidden {
 		t.Fatalf("user nonaktif tidak boleh punya akses, got %v", err)
 	}
 }

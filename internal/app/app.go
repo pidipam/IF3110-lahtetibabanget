@@ -11,6 +11,7 @@ import (
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/auth"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/authz"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/migration"
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/dbconn"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/users"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/web"
 )
@@ -38,6 +39,28 @@ type App struct {
 }
 
 var notices = map[string]string{"user_created": "User berhasil dibuat.", "user_updated": "User berhasil diperbarui.", "password_reset": "Password berhasil direset dan semua sesi user tersebut diakhiri.", "group_created": "Grup berhasil dibuat.", "group_updated": "Grup berhasil diperbarui.", "group_deleted": "Grup berhasil dihapus.", "member_added": "Anggota berhasil ditambahkan.", "member_removed": "Anggota berhasil dikeluarkan."}
+	DB *pgxpool.Pool
+	Session auth.SessionConfig
+	Secure bool
+	Logger *slog.Logger
+	EncryptionKey []byte
+}
+
+type App struct {
+	Users *users.Store
+	Sessions *auth.SessionStore
+	Authz *authz.Authorizer
+	Auth *auth.Manager
+	Render *web.Renderer
+	Logger *slog.Logger
+	Conns *dbconn.Store
+	Manager *dbconn.Manager
+	GrantStore *dbconn.GrantStore
+	Grants *dbconn.GrantService
+	mux *http.ServeMux
+	handler http.Handler
+}
+var notices = map[string]string{"user_created": "User berhasil dibuat.", "user_updated": "User berhasil diperbarui.", "password_reset": "Password berhasil direset dan semua sesi user tersebut diakhiri.", "group_created": "Grup berhasil dibuat.", "group_updated": "Grup berhasil diperbarui.", "group_deleted": "Grup berhasil dihapus.", "member_added": "Anggota berhasil ditambahkan.", "member_removed": "Anggota berhasil dikeluarkan.", "connection_created": "Koneksi database berhasil dibuat.", "connection_updated": "Koneksi database berhasil diperbarui.", "connection_deleted": "Koneksi database berhasil dihapus.", "access_updated": "Akses database grup berhasil diperbarui."}
 
 func New(opt Options) (*App, error) {
 	rd, err := web.NewRenderer()
@@ -57,9 +80,21 @@ func New(opt Options) (*App, error) {
 		a.Migrations = migration.NewService(repo, a.migrationExec, a.Authz)
 	}
 
+	cipher, err := dbconn.NewCipher(opt.EncryptionKey)
+	if err != nil {
+		return nil, err
+	}
+	a.Conns = dbconn.NewStore(opt.DB, cipher)
+	a.Manager = dbconn.NewManager(a.Conns)
+	a.GrantStore = dbconn.NewGrantStore(opt.DB)
+	a.Grants = &dbconn.GrantService{Repo: a.GrantStore, Sessions: a.Sessions}
 	a.routes()
 	a.handler = securityHeaders(a.logRequests(a.Auth.LoadSession(a.mux)))
 	return a, nil
+}
+
+func (a *App) Close() {
+	a.Manager.Close()
 }
 
 func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -86,6 +121,10 @@ func navOf(path string) string {
 		return "users"
 	case strings.HasPrefix(path, "/admin/groups"):
 		return "groups"
+	case strings.HasPrefix(path, "/admin/connections"):
+		return "connections"
+	case strings.HasPrefix(path, "/databases"):
+		return "databases"
 	}
 	return ""
 }

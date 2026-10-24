@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/auth"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/config"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/migration"
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/dbconn"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/platformdb"
 )
 
@@ -27,6 +29,10 @@ func main() {
 
 func run(logger *slog.Logger) error {
 	cfg := config.Load()
+	encKey, err := dbconn.ParseKey(cfg.EncryptionKey)
+	if err != nil {
+		return fmt.Errorf("APP_ENCRYPTION_KEY tidak valid: %w (gunakan openssl rand -base64 32)", err)
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	db, err := platformdb.Connect(ctx, cfg.DatabaseURL)
@@ -37,6 +43,7 @@ func run(logger *slog.Logger) error {
 	if err := platformdb.Migrate(ctx, db); err != nil {
 		return err
 	}
+<<<<<<< HEAD
 
 	var targets migration.Targets
 	if url := os.Getenv("TARGET_DATABASE_URL"); url != "" {
@@ -49,9 +56,13 @@ func run(logger *slog.Logger) error {
 	}
 
 	a, err := app.New(app.Options{DB: db, Session: auth.SessionConfig{IdleTimeout: cfg.IdleTimeout, AbsoluteTimeout: cfg.AbsoluteTimeout, RotateInterval: cfg.RotateInterval, GracePeriod: cfg.GracePeriod}, Secure: cfg.Production, Logger: logger, Targets: targets})
+=======
+	a, err := app.New(app.Options{DB: db, Session: auth.SessionConfig{IdleTimeout: cfg.IdleTimeout, AbsoluteTimeout: cfg.AbsoluteTimeout, RotateInterval: cfg.RotateInterval, GracePeriod: cfg.GracePeriod}, Secure: cfg.Production, Logger: logger, EncryptionKey: encKey})
+>>>>>>> origin/feat/database-management
 	if err != nil {
 		return err
 	}
+	defer a.Close()
 	created, err := app.SeedAdmin(ctx, a.Users, cfg.AdminUsername, cfg.AdminPassword)
 	if err != nil {
 		return err
