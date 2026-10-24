@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -14,12 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/dbconn"
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/testutil"
 )
-
-// Integration test ini membutuhkan target DB (docker-compose, port 5435) dan dilewati bila
-// TARGET_DB_URL kosong. Contoh:
-//
-//	TARGET_DB_URL='postgres://USER:PASS@127.0.0.1:5435/DBNAME?sslmode=disable' go test ./internal/explorer/ -count=1
 
 const mixedTable = `Mixed Case "Q"`
 
@@ -31,10 +26,7 @@ type fixture struct {
 
 func setup(t *testing.T) *fixture {
 	t.Helper()
-	url := os.Getenv("TARGET_DB_URL")
-	if url == "" {
-		t.Skip("TARGET_DB_URL kosong; integration test explorer dilewati")
-	}
+	url := testutil.RequireEnv(t, testutil.EnvTestDB)
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, url)
 	if err != nil {
@@ -259,7 +251,6 @@ func TestIntegrationWhitelistRejectsUnknown(t *testing.T) {
 	}
 }
 
-// recordingBeginner mencatat opsi transaksi dan tx yang dikembalikan.
 type recordingBeginner struct {
 	inner TxBeginner
 	opts  pgx.TxOptions
@@ -283,11 +274,10 @@ func TestIntegrationViewerIsReadOnlyAndRollsBack(t *testing.T) {
 	if rec.opts.AccessMode != pgx.ReadOnly {
 		t.Fatalf("transaksi harus read-only, dapat %q", rec.opts.AccessMode)
 	}
-	// Setelah FetchPage, transaksi harus sudah ditutup (rollback), bukan menggantung.
+	// Setelah FetchPage, transaksi harus rollback
 	if _, err := rec.tx.Exec(ctx, "SELECT 1"); !errors.Is(err, pgx.ErrTxClosed) {
 		t.Fatalf("tx harus sudah ditutup, dapat %v", err)
 	}
-	// Dan transaksi read-only memang menolak tulis (SQLSTATE 25006).
 	tx, err := f.pool.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
 	if err != nil {
 		t.Fatal(err)

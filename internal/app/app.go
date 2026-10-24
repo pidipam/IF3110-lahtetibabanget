@@ -49,25 +49,21 @@ func New(opt Options) (*App, error) {
 	}
 	a := &App{Users: users.NewStore(opt.DB), Sessions: auth.NewSessionStore(opt.DB, opt.Session), Authz: authz.New(authz.NewPGStore(opt.DB)), Render: rd, Logger: logger, mux: http.NewServeMux()}
 	a.Auth = &auth.Manager{Sessions: a.Sessions, Users: a.Users, Secure: opt.Secure, Unauthorized: a.unauthorized, Forbidden: a.forbidden, Fail: a.fail}
-	if len(opt.EncryptionKey) > 0 {
-		cipher, err := dbconn.NewCipher(opt.EncryptionKey)
-		if err != nil {
-			return nil, err
-		}
-		a.Conns = dbconn.NewStore(opt.DB, cipher)
-		a.Manager = dbconn.NewManager(a.Conns)
-		a.GrantStore = dbconn.NewGrantStore(opt.DB)
-		a.Grants = &dbconn.GrantService{Repo: a.GrantStore, Sessions: a.Sessions}
+	cipher, err := dbconn.NewCipher(opt.EncryptionKey)
+	if err != nil {
+		return nil, err
 	}
+	a.Conns = dbconn.NewStore(opt.DB, cipher)
+	a.Manager = dbconn.NewManager(a.Conns)
+	a.GrantStore = dbconn.NewGrantStore(opt.DB)
+	a.Grants = &dbconn.GrantService{Repo: a.GrantStore, Sessions: a.Sessions}
 	a.routes()
 	a.handler = securityHeaders(a.logRequests(a.Auth.LoadSession(a.mux)))
 	return a, nil
 }
 
 func (a *App) Close() {
-	if a.Manager != nil {
-		a.Manager.Close()
-	}
+	a.Manager.Close()
 }
 
 func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
