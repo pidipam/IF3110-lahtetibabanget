@@ -14,27 +14,27 @@ var ErrNoSession = errors.New("session tidak ditemukan")
 var ErrSessionExpired = errors.New("session berakhir")
 
 type SessionConfig struct {
-	IdleTimeout time.Duration
+	IdleTimeout     time.Duration
 	AbsoluteTimeout time.Duration
-	RotateInterval time.Duration
-	GracePeriod time.Duration
+	RotateInterval  time.Duration
+	GracePeriod     time.Duration
 }
 
 type Session struct {
-	ID int64
-	UserID int64
-	CSRFToken string
-	CreatedAt time.Time
-	LastSeenAt time.Time
-	RotatedAt time.Time
-	ExpiresAt time.Time
+	ID          int64
+	UserID      int64
+	CSRFToken   string
+	CreatedAt   time.Time
+	LastSeenAt  time.Time
+	RotatedAt   time.Time
+	ExpiresAt   time.Time
 	ForceRotate bool
-	Revoked bool
-	IsCurrent bool
+	Revoked     bool
+	IsCurrent   bool
 }
 
 type SessionStore struct {
-	db *pgxpool.Pool
+	db  *pgxpool.Pool
 	cfg SessionConfig
 	Now func() time.Time
 }

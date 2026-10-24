@@ -16,13 +16,13 @@ import (
 var templateFiles embed.FS
 
 type View struct {
-	Title string
-	Nav string
-	User *users.User
-	CSRF string
+	Title  string
+	Nav    string
+	User   *users.User
+	CSRF   string
 	Notice string
-	Error string
-	Data map[string]any
+	Error  string
+	Data   map[string]any
 }
 
 type Renderer struct {

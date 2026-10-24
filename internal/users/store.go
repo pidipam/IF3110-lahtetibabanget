@@ -15,20 +15,20 @@ var ErrNotFound = errors.New("data tidak ditemukan")
 var ErrDuplicate = errors.New("nama sudah dipakai")
 
 type User struct {
-	ID int64
-	Username string
+	ID           int64
+	Username     string
 	PasswordHash string
-	IsAdmin bool
-	IsActive bool
-	CreatedAt time.Time
+	IsAdmin      bool
+	IsActive     bool
+	CreatedAt    time.Time
 }
 
 type Group struct {
-	ID int64
-	Name string
+	ID          int64
+	Name        string
 	Description string
 	MemberCount int
-	CreatedAt time.Time
+	CreatedAt   time.Time
 }
 
 type Store struct {

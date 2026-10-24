@@ -13,7 +13,7 @@ import (
 var ErrBusy = errors.New("ada migration lain yang sedang berjalan pada database ini, coba lagi sebentar")
 
 const (
-	DefaultStatementTimeout = 30 * time.Second
+	DefaultStatementTimeout       = 30 * time.Second
 	lockBase                int64 = 7_310_100_000_000 // dasar key advisory lock; ditambah db_id
 )
 

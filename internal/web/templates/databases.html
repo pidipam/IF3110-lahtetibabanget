@@ -1,0 +1,31 @@
+{{define "content"}}
+<div class="card">
+    <h1>Database</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>Nama</th>
+                <th>Host</th>
+                <th>Database</th>
+                <th>Akses</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Data.Rows}}
+                <tr>
+                    <td>{{.Conn.Name}}</td>
+                    <td class="muted">{{.Conn.Host}}</td>
+                    <td>{{.Conn.DBName}}</td>
+                    <td><span class="badge">{{.Level.Label}}</span></td>
+                    <td><a href="{{.Href}}">Buka</a></td>
+                </tr>
+            {{else}}
+                <tr>
+                    <td colspan="5" class="muted">Anda belum memiliki akses database. Hubungi Platform Admin untuk meminta akses lewat grup Anda.</td>
+                </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}

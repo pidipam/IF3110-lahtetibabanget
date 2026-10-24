@@ -6,19 +6,20 @@ import (
 )
 
 type Config struct {
-	Addr string
-	DatabaseURL string
-	Production bool
-	AdminUsername string
-	AdminPassword string
-	IdleTimeout time.Duration
+	Addr            string
+	DatabaseURL     string
+	Production      bool
+	AdminUsername   string
+	AdminPassword   string
+	EncryptionKey   string
+	IdleTimeout     time.Duration
 	AbsoluteTimeout time.Duration
-	RotateInterval time.Duration
-	GracePeriod time.Duration
+	RotateInterval  time.Duration
+	GracePeriod     time.Duration
 }
 
 func Load() Config {
-	return Config{Addr: env("APP_ADDR", ":8080"), DatabaseURL: env("DATABASE_URL", "postgres://postgres:postgres@127.0.0.1:5434/dbmp?sslmode=disable"), Production: env("APP_ENV", "development") == "production", AdminUsername: env("ADMIN_USERNAME", "admin"), AdminPassword: os.Getenv("ADMIN_PASSWORD"), IdleTimeout: duration("SESSION_IDLE_TIMEOUT", 30*time.Minute), AbsoluteTimeout: duration("SESSION_ABSOLUTE_TIMEOUT", 8*time.Hour), RotateInterval: duration("SESSION_ROTATE_INTERVAL", 15*time.Minute), GracePeriod: duration("SESSION_GRACE_PERIOD", 30*time.Second)}
+	return Config{Addr: env("APP_ADDR", ":8080"), DatabaseURL: env("DATABASE_URL", "postgres://postgres:postgres@127.0.0.1:5434/dbmp?sslmode=disable"), Production: env("APP_ENV", "development") == "production", AdminUsername: env("ADMIN_USERNAME", "admin"), AdminPassword: os.Getenv("ADMIN_PASSWORD"), EncryptionKey: os.Getenv("APP_ENCRYPTION_KEY"), IdleTimeout: duration("SESSION_IDLE_TIMEOUT", 30*time.Minute), AbsoluteTimeout: duration("SESSION_ABSOLUTE_TIMEOUT", 8*time.Hour), RotateInterval: duration("SESSION_ROTATE_INTERVAL", 15*time.Minute), GracePeriod: duration("SESSION_GRACE_PERIOD", 30*time.Second)}
 }
 
 func env(key, fallback string) string {

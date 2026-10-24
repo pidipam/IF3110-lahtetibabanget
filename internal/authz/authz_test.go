@@ -8,7 +8,7 @@ import (
 
 type fakeStore struct {
 	levels map[int64][]Level
-	err error
+	err    error
 }
 
 func (f fakeStore) GroupLevels(ctx context.Context, userID, dbID int64) ([]Level, error) {
@@ -21,7 +21,7 @@ func (f fakeStore) DatabaseLevels(ctx context.Context, userID int64) (map[int64]
 
 func TestEffectiveTakesHighest(t *testing.T) {
 	cases := []struct {
-		in []Level
+		in   []Level
 		want Level
 	}{{nil, LevelNone}, {[]Level{LevelView}, LevelView}, {[]Level{LevelView, LevelEdit}, LevelEdit}, {[]Level{LevelEdit, LevelView, LevelView}, LevelEdit}}
 	for _, c := range cases {

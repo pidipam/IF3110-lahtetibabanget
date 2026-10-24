@@ -17,19 +17,19 @@ const PreCSRFCookie = "dbmp_csrf"
 type ctxKey struct{}
 
 type Identity struct {
-	User *users.User
+	User    *users.User
 	Session *Session
-	CSRF string
+	CSRF    string
 	Expired bool
 }
 
 type Manager struct {
-	Sessions *SessionStore
-	Users *users.Store
-	Secure bool
+	Sessions     *SessionStore
+	Users        *users.Store
+	Secure       bool
 	Unauthorized func(w http.ResponseWriter, r *http.Request, expired bool)
-	Forbidden func(w http.ResponseWriter, r *http.Request)
-	Fail func(w http.ResponseWriter, r *http.Request, err error)
+	Forbidden    func(w http.ResponseWriter, r *http.Request)
+	Fail         func(w http.ResponseWriter, r *http.Request, err error)
 }
 
 func FromContext(ctx context.Context) *Identity {

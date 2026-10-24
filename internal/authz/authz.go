@@ -9,9 +9,9 @@ type Action string
 
 const (
 	ManagePlatform Action = "platform.manage"
-	ViewDatabase Action = "database.view"
-	ViewMigration Action = "migration.view"
-	EditMigration Action = "migration.edit"
+	ViewDatabase   Action = "database.view"
+	ViewMigration  Action = "migration.view"
+	EditMigration  Action = "migration.edit"
 )
 
 type Level int
@@ -27,7 +27,7 @@ var ErrForbidden = errors.New("akses ditolak")
 var ErrUnknownAction = errors.New("aksi tidak dikenal")
 
 type Principal struct {
-	UserID int64
+	UserID  int64
 	IsAdmin bool
 }
 

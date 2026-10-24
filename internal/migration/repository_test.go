@@ -3,32 +3,26 @@ package migration
 import (
 	"context"
 	"errors"
-	"os"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/pidipam/IF3110-lahtetibabanget/internal/platformdb"
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/testutil"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/users"
 )
 
-// testRepo menyiapkan platform DB bersih dan satu user ("alice"). Dipakai ulang oleh test berikutnya.
+// testRepo menyiapkan platform DB bersih, dua koneksi (id 1 dan 2), dan satu user ("alice").
 func testRepo(t *testing.T) (*Repository, *pgxpool.Pool, int64) {
 	t.Helper()
-	dsn := os.Getenv("TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("TEST_DATABASE_URL belum diisi, integration test dilewati")
+	if testing.Short() {
+		t.Skip("integration test dilewati pada -short")
 	}
+	db := testutil.NewTestDB(t) // migrasi platform + TRUNCATE ... RESTART IDENTITY
 	ctx := context.Background()
-	db, err := platformdb.Connect(ctx, dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(db.Close)
-	if err := platformdb.Migrate(ctx, db); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(ctx, "TRUNCATE migrations, users RESTART IDENTITY CASCADE"); err != nil {
-		t.Fatal(err)
+	for _, name := range []string{"mig-test-1", "mig-test-2"} {
+		if _, err := db.Exec(ctx, `INSERT INTO db_connections (name, host, port, db_name, username, password_enc)
+			VALUES ($1, '127.0.0.1', 5435, 'sample', 'app', 'x')`, name); err != nil {
+			t.Fatal(err)
+		}
 	}
 	u, err := users.NewStore(db).Create(ctx, "alice", "bukan-hash-asli", false)
 	if err != nil {
@@ -59,7 +53,10 @@ func TestCreateAndGet(t *testing.T) {
 func TestGetScopedToDatabase(t *testing.T) {
 	r, _, uid := testRepo(t)
 	ctx := context.Background()
-	m, _ := r.Create(ctx, 1, uid, "a", "SELECT 1;")
+	m, err := r.Create(ctx, 1, uid, "a", "SELECT 1;")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := r.Get(ctx, 2, m.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("migration milik DB 1 tidak boleh terbuka lewat DB 2, got %v", err)
 	}
@@ -71,7 +68,10 @@ func TestGetScopedToDatabase(t *testing.T) {
 func TestUpdateDraft(t *testing.T) {
 	r, db, uid := testRepo(t)
 	ctx := context.Background()
-	m, _ := r.Create(ctx, 1, uid, "lama", "SELECT 1;")
+	m, err := r.Create(ctx, 1, uid, "lama", "SELECT 1;")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := r.UpdateDraft(ctx, 1, m.ID, "baru", "SELECT 2;"); err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,9 @@ func TestUpdateDraft(t *testing.T) {
 	if err := r.UpdateDraft(ctx, 2, m.ID, "x", "SELECT 3;"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("DB salah harus ErrNotFound, got %v", err)
 	}
-	db.Exec(ctx, "UPDATE migrations SET status = 'success', version = 1 WHERE id = $1", m.ID)
+	if _, err := db.Exec(ctx, "UPDATE migrations SET status = 'success', version = 1 WHERE id = $1", m.ID); err != nil {
+		t.Fatal(err)
+	}
 	if err := r.UpdateDraft(ctx, 1, m.ID, "x", "SELECT 4;"); !errors.Is(err, ErrNotDraft) {
 		t.Fatalf("non-draft harus ErrNotDraft, got %v", err)
 	}
@@ -95,9 +97,17 @@ func TestUpdateDraft(t *testing.T) {
 func TestListScopedAndNewestFirst(t *testing.T) {
 	r, _, uid := testRepo(t)
 	ctx := context.Background()
-	first, _ := r.Create(ctx, 1, uid, "pertama", "SELECT 1;")
-	second, _ := r.Create(ctx, 1, uid, "kedua", "SELECT 2;")
-	r.Create(ctx, 2, uid, "db lain", "SELECT 3;")
+	first, err := r.Create(ctx, 1, uid, "pertama", "SELECT 1;")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := r.Create(ctx, 1, uid, "kedua", "SELECT 2;")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Create(ctx, 2, uid, "db lain", "SELECT 3;"); err != nil {
+		t.Fatal(err)
+	}
 	list, err := r.List(ctx, 1)
 	if err != nil {
 		t.Fatal(err)
@@ -131,5 +141,22 @@ func TestSchemaConstraints(t *testing.T) {
 	}
 	if _, err := db.Exec(ctx, q, 2, 1, "success", uid); err != nil {
 		t.Errorf("versi 1 pada DB lain harus boleh: %v", err)
+	}
+	if _, err := db.Exec(ctx, q, 99, nil, "draft", uid); err == nil {
+		t.Error("db_id tanpa koneksi harus ditolak oleh foreign key")
+	}
+}
+
+func TestConnectionWithHistoryCannotBeDeleted(t *testing.T) {
+	r, db, uid := testRepo(t)
+	ctx := context.Background()
+	if _, err := r.Create(ctx, 1, uid, "riwayat", "SELECT 1;"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(ctx, "DELETE FROM db_connections WHERE id = 1"); err == nil {
+		t.Fatal("koneksi yang punya riwayat migration tidak boleh terhapus (FK harus RESTRICT, bukan CASCADE)")
+	}
+	if _, err := db.Exec(ctx, "DELETE FROM db_connections WHERE id = 2"); err != nil {
+		t.Fatalf("koneksi tanpa riwayat harus bisa dihapus: %v", err)
 	}
 }

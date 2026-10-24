@@ -1,0 +1,42 @@
+{{define "content"}}
+{{$c := .Data.Conn}}
+<div class="card">
+    <div class="row">
+        <h1>{{$c.Name}}</h1>
+        <span class="badge">{{.Data.Level.Label}}</span>
+        <span class="spacer"></span>
+        <a class="btn secondary" href="{{.Data.MigrationHref}}">Migration</a>
+        <a class="btn secondary" href="/databases">Kembali</a>
+    </div>
+    <p class="muted">{{$c.DBName}}</p>
+</div>
+{{range .Data.Schemas}}
+<div class="card">
+    <h2>Schema {{.Name}}</h2>
+    {{with .Tables}}
+        <table>
+            <thead>
+                <tr>
+                    <th>Nama</th>
+                    <th>Jenis</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .}}
+                    <tr>
+                        <td><a href="{{.Href}}">{{.Name}}</a></td>
+                        <td class="muted">{{.Kind}}</td>
+                    </tr>
+                {{end}}
+            </tbody>
+        </table>
+    {{else}}
+        <p class="muted">Tidak ada tabel atau view.</p>
+    {{end}}
+</div>
+{{else}}
+<div class="card">
+    <p class="muted">Database ini tidak punya schema yang dapat ditampilkan.</p>
+</div>
+{{end}}
+{{end}}

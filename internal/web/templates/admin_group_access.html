@@ -1,0 +1,44 @@
+{{define "content"}}
+{{$g := .Data.Group}}
+<div class="card">
+    <h1>Akses Database Grup {{$g.Name}}</h1>
+    <p class="muted">Atur level akses grup ini untuk setiap database. Anggota yang punya beberapa grup mendapat level tertinggi.</p>
+    {{if .Data.Rows}}
+        <form method="post" action="/admin/groups/{{$g.ID}}/access">
+            <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Database</th>
+                        <th>Host</th>
+                        <th>Level</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Data.Rows}}
+                        <tr>
+                            <td><label for="level_{{.Conn.ID}}">{{.Conn.Name}}</label></td>
+                            <td class="muted">{{.Conn.Host}}:{{.Conn.Port}}/{{.Conn.DBName}}</td>
+                            <td>
+                                <select id="level_{{.Conn.ID}}" name="level_{{.Conn.ID}}">
+                                    <option value="none"{{if eq .Level "none"}} selected{{end}}>Tidak ada akses</option>
+                                    <option value="view"{{if eq .Level "view"}} selected{{end}}>View Only</option>
+                                    <option value="edit"{{if eq .Level "edit"}} selected{{end}}>View + Edit</option>
+                                </select>
+                            </td>
+                        </tr>
+                    {{end}}
+                </tbody>
+            </table>
+            <p class="muted">Menurunkan atau mencabut akses langsung mengakhiri sesi semua anggota grup.</p>
+            <p>
+                <button type="submit">Simpan akses</button>
+                <a class="btn secondary" href="/admin/groups/{{$g.ID}}">Kembali</a>
+            </p>
+        </form>
+    {{else}}
+        <p class="muted">Belum ada koneksi database. <a href="/admin/connections/new">Tambah koneksi</a> terlebih dahulu.</p>
+        <p><a class="btn secondary" href="/admin/groups/{{$g.ID}}">Kembali</a></p>
+    {{end}}
+</div>
+{{end}}

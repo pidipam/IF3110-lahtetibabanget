@@ -66,6 +66,11 @@
             .narrow button{width:100%;margin-top:8px}
             ul{padding-left:20px}
             li{margin:4px 0}
+            .scroll{overflow-x:auto}
+            .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+            .null{color:var(--muted);font-style:italic;font-size:13px}
+            td.cell{max-width:320px;overflow-wrap:anywhere}
+            .pager{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:18px}
         </style>
     </head>
     <body>
@@ -82,9 +87,11 @@
                 {{if .User}}
                     <nav class="nav">
                         <a href="/"{{if eq .Nav "home"}} class="active"{{end}}>Beranda</a>
+                        <a href="/databases"{{if eq .Nav "databases"}} class="active"{{end}}>Database</a>
                         {{if .User.IsAdmin}}
                             <a href="/admin/users"{{if eq .Nav "users"}} class="active"{{end}}>User</a>
                             <a href="/admin/groups"{{if eq .Nav "groups"}} class="active"{{end}}>Grup</a>
+                            <a href="/admin/connections"{{if eq .Nav "connections"}} class="active"{{end}}>Koneksi</a>
                         {{end}}
                     </nav>
                     <div class="account">

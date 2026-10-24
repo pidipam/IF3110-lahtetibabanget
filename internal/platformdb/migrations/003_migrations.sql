@@ -1,6 +1,6 @@
 CREATE TABLE migrations (
 	id BIGSERIAL PRIMARY KEY,
-	db_id BIGINT NOT NULL, -- refference ke database (vara)
+    db_id BIGINT NOT NULL REFERENCES db_connections(id) ON DELETE RESTRICT,
 	version INT,
 	title TEXT NOT NULL,
 	sql_text TEXT NOT NULL,

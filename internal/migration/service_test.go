@@ -35,7 +35,7 @@ func TestServiceViewOnly(t *testing.T) {
 	ctx := context.Background()
 	svc := x.service(fakeAccess{1: authz.LevelView})
 	p := authz.Principal{UserID: x.uid}
-	m := x.draft(t, "CREATE TABLE mig_t1 (id int);")
+	m := x.draft(t, "CREATE TABLE zz_mig_t1 (id int);")
 
 	if _, err := svc.List(ctx, p, 1); err != nil {
 		t.Errorf("View Only harus bisa melihat riwayat: %v", err)
@@ -56,7 +56,7 @@ func TestServiceViewOnly(t *testing.T) {
 	if after.Status != StatusDraft || after.Version != nil || after.Title != "uji" {
 		t.Fatalf("penolakan tidak boleh mengubah data: %+v", after)
 	}
-	if x.tableExists(t, "mig_t1") {
+	if x.tableExists(t, "zz_mig_t1") {
 		t.Fatal("SQL dijalankan padahal user hanya View Only")
 	}
 	if list, _ := x.repo.List(ctx, 1); len(list) != 1 {
@@ -100,14 +100,14 @@ func TestServiceEditFullFlow(t *testing.T) {
 	svc := x.service(fakeAccess{1: authz.LevelEdit})
 	p := authz.Principal{UserID: x.uid}
 
-	m, err := svc.Create(ctx, p, 1, "  buat tabel  ", "CREATE TABLE mig_t1 (id int);")
+	m, err := svc.Create(ctx, p, 1, "  buat tabel  ", "CREATE TABLE zz_mig_t1 (id int);")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if m.Title != "buat tabel" || m.Status != StatusDraft {
 		t.Fatalf("draft salah: %+v", m)
 	}
-	if err := svc.Update(ctx, p, 1, m.ID, "buat tabel 1", "CREATE TABLE mig_t1 (id int, nama text);"); err != nil {
+	if err := svc.Update(ctx, p, 1, m.ID, "buat tabel 1", "CREATE TABLE zz_mig_t1 (id int, nama text);"); err != nil {
 		t.Fatal(err)
 	}
 	got, err := svc.Execute(ctx, p, 1, m.ID)
@@ -117,7 +117,7 @@ func TestServiceEditFullFlow(t *testing.T) {
 	if got.Status != StatusSuccess || *got.Version != 1 || got.Title != "buat tabel 1" {
 		t.Fatalf("hasil salah: %+v", got)
 	}
-	if !x.tableExists(t, "mig_t1") {
+	if !x.tableExists(t, "zz_mig_t1") {
 		t.Fatal("tabel tidak terbentuk")
 	}
 	if err := svc.Update(ctx, p, 1, m.ID, "x", "SELECT 1;"); !errors.Is(err, ErrNotDraft) {

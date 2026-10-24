@@ -3,11 +3,11 @@ package migration
 import (
 	"context"
 	"errors"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/testutil"
 )
 
 type execEnv struct {
@@ -20,10 +20,10 @@ type execEnv struct {
 
 func setupExec(t *testing.T) *execEnv {
 	t.Helper()
-	url := os.Getenv("TEST_TARGET_DATABASE_URL")
-	if url == "" {
-		t.Skip("TEST_TARGET_DATABASE_URL belum diisi, test eksekusi dilewati")
+	if testing.Short() {
+		t.Skip("integration test dilewati pada -short")
 	}
+	url := testutil.RequireEnv(t, "TARGET_DB_URL")
 	repo, db, uid := testRepo(t)
 	ctx := context.Background()
 	target, err := pgxpool.New(ctx, url)
@@ -31,7 +31,9 @@ func setupExec(t *testing.T) *execEnv {
 		t.Fatal(err)
 	}
 	t.Cleanup(target.Close)
-	if _, err := target.Exec(ctx, "DROP TABLE IF EXISTS mig_t1, mig_t2, mig_t3 CASCADE"); err != nil {
+	const drop = "DROP TABLE IF EXISTS zz_mig_t1, zz_mig_t2, zz_mig_t3 CASCADE"
+	t.Cleanup(func() { target.Exec(context.Background(), drop) }) // jalan sebelum target.Close
+	if _, err := target.Exec(ctx, drop); err != nil {
 		t.Fatal(err)
 	}
 	targets, err := NewStaticTargets(ctx, 1, "target-test", url)
@@ -63,7 +65,7 @@ func (x *execEnv) tableExists(t *testing.T, name string) bool {
 func TestExecuteSuccessChangesSchema(t *testing.T) {
 	x := setupExec(t)
 	ctx := context.Background()
-	m := x.draft(t, "CREATE TABLE mig_t1 (id int); INSERT INTO mig_t1 VALUES (1);")
+	m := x.draft(t, "CREATE TABLE zz_mig_t1 (id int); INSERT INTO zz_mig_t1 VALUES (1);")
 	got, err := x.e.Execute(ctx, 1, m.ID, x.uid)
 	if err != nil {
 		t.Fatal(err)
@@ -78,7 +80,9 @@ func TestExecuteSuccessChangesSchema(t *testing.T) {
 		t.Fatalf("waktu/error salah: %+v", got)
 	}
 	var n int
-	x.target.QueryRow(ctx, "SELECT count(*) FROM mig_t1").Scan(&n)
+	if err := x.target.QueryRow(ctx, "SELECT count(*) FROM zz_mig_t1").Scan(&n); err != nil {
+		t.Fatal(err)
+	}
 	if n != 1 {
 		t.Fatalf("data tidak masuk, n=%d", n)
 	}
@@ -86,7 +90,7 @@ func TestExecuteSuccessChangesSchema(t *testing.T) {
 
 func TestExecuteErrorRollsBackEverything(t *testing.T) {
 	x := setupExec(t)
-	m := x.draft(t, "CREATE TABLE mig_t2 (id int); INSERT INTO tabel_tidak_ada VALUES (1);")
+	m := x.draft(t, "CREATE TABLE zz_mig_t2 (id int); INSERT INTO tabel_tidak_ada VALUES (1);")
 	got, err := x.e.Execute(context.Background(), 1, m.ID, x.uid)
 	if err != nil {
 		t.Fatalf("migration gagal bukan error Go: %v", err)
@@ -94,7 +98,7 @@ func TestExecuteErrorRollsBackEverything(t *testing.T) {
 	if got.Status != StatusFailed || got.ErrorMessage == "" || got.Version == nil || *got.Version != 1 {
 		t.Fatalf("hasil salah: %+v", got)
 	}
-	if x.tableExists(t, "mig_t2") {
+	if x.tableExists(t, "zz_mig_t2") {
 		t.Fatal("statement pertama tidak ikut di-rollback")
 	}
 }
@@ -102,7 +106,7 @@ func TestExecuteErrorRollsBackEverything(t *testing.T) {
 func TestVersionsStayLinear(t *testing.T) {
 	x := setupExec(t)
 	ctx := context.Background()
-	sqls := []string{"CREATE TABLE mig_t1 (id int);", "SELECT salah_sintaks FROM;", "CREATE TABLE mig_t3 (id int);"}
+	sqls := []string{"CREATE TABLE zz_mig_t1 (id int);", "SELECT salah_sintaks FROM;", "CREATE TABLE zz_mig_t3 (id int);"}
 	for i, s := range sqls {
 		got, err := x.e.Execute(ctx, 1, x.draft(t, s).ID, x.uid)
 		if err != nil {
@@ -189,7 +193,7 @@ func TestStatementTimeout(t *testing.T) {
 func TestTargetUnavailableKeepsDraft(t *testing.T) {
 	x := setupExec(t)
 	ctx := context.Background()
-	bad, err := NewStaticTargets(ctx, 1, "mati", "postgres://postgres:postgres@127.0.0.1:1/x?sslmode=disable")
+	bad, err := NewStaticTargets(ctx, 1, "mati", "postgres://app:app@127.0.0.1:1/x?sslmode=disable")
 	if err != nil {
 		t.Fatal(err)
 	}
