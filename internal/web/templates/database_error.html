@@ -1,0 +1,16 @@
+{{define "content"}}
+<section class="hero">
+    <h1>{{.Data.Code}}</h1>
+    <p>{{.Title}}</p>
+</section>
+<div class="card narrow">
+    <p><strong>{{.Data.Conn.Name}}</strong></p>
+    <p>{{.Data.Message}}</p>
+    <p class="muted">Aplikasi tetap berjalan. Coba lagi beberapa saat lagi{{if .User.IsAdmin}} atau periksa pengaturan koneksi{{else}} atau hubungi Platform Admin{{end}}.</p>
+    <p>
+        <a class="btn" href="{{.Data.Retry}}">Coba lagi</a>
+        {{if .User.IsAdmin}}<a class="btn secondary" href="/admin/connections/{{.Data.Conn.ID}}">Periksa koneksi</a>{{end}}
+        <a class="btn secondary" href="/databases">Kembali</a>
+    </p>
+</div>
+{{end}}
