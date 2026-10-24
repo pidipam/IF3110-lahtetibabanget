@@ -96,3 +96,10 @@ func (r *Repository) UpdateDraft(ctx context.Context, dbID, id int64, title, sql
 	}
 	return ErrNotDraft
 }
+
+// MaxVersion mengembalikan versi tertinggi yang pernah dipakai pada satu database (0 bila belum ada).
+func (r *Repository) MaxVersion(ctx context.Context, dbID int64) (int, error) {
+	var v int
+	err := r.db.QueryRow(ctx, "SELECT COALESCE(MAX(version), 0) FROM migrations WHERE db_id = $1", dbID).Scan(&v)
+	return v, err
+}

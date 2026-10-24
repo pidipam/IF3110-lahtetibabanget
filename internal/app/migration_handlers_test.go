@@ -7,10 +7,14 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/migration"
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/testutil"
 )
 
-// migConn membuat satu baris db_connections. Halaman riwayat/editor hanya membaca nama koneksi
-// lewat SQL, jadi password_enc palsu cukup. Eksekusi sungguhan (butuh Manager) diuji terpisah.
+// migConn membuat satu baris db_connections dengan password palsu. Cukup untuk halaman
+// riwayat/editor yang hanya membaca nama koneksi. Eksekusi sungguhan memakai SeedConnection.
 func migConn(e *testEnv, name string) int64 {
 	e.t.Helper()
 	var id int64
@@ -30,8 +34,20 @@ func migGrant(e *testEnv, groupID, connID int64, level string) {
 	}
 }
 
-// migFixture: dua koneksi, user editor (View + Edit) dan viewer (View Only) pada koneksi pertama,
-// user outsider tanpa grup, dan admin tanpa grant.
+// userGroup mengembalikan id grup pertama milik user.
+func (e *testEnv) userGroup(username string) int64 {
+	e.t.Helper()
+	var id int64
+	err := e.db.QueryRow(context.Background(), `SELECT m.group_id FROM group_members m
+		JOIN users u ON u.id = m.user_id WHERE u.username = $1 ORDER BY m.group_id LIMIT 1`, username).Scan(&id)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	return id
+}
+
+// migFixture: dua koneksi, editor (View + Edit) dan viewer (View Only) pada koneksi pertama,
+// outsider tanpa grup, dan admin tanpa grant.
 type migFixture struct {
 	e     *testEnv
 	conn1 int64
@@ -46,7 +62,6 @@ func setupMigPages(t *testing.T) *migFixture {
 	}
 	e := setup(t)
 	ctx := context.Background()
-	// Pastikan tabel baru bersih walaupun setup(t) hanya mengosongkan tabel miliknya.
 	if _, err := e.db.Exec(ctx, "TRUNCATE migrations, db_connections RESTART IDENTITY CASCADE"); err != nil {
 		t.Fatal(err)
 	}
@@ -122,8 +137,7 @@ func TestMigrationPagesEditorFlow(t *testing.T) {
 	if !strings.Contains(bad.Body.String(), "judul wajib diisi") {
 		t.Fatal("pesan validasi judul tidak tampil")
 	}
-	tx := ed.post(f.base, url.Values{"title": {"x"}, "sql": {"SELECT 1; COMMIT;"}})
-	expectStatus(t, tx, http.StatusUnprocessableEntity)
+	expectStatus(t, ed.post(f.base, url.Values{"title": {"x"}, "sql": {"SELECT 1; COMMIT;"}}), http.StatusUnprocessableEntity)
 	if e.count("SELECT count(*) FROM migrations") != 1 {
 		t.Fatal("input tidak valid tidak boleh tersimpan")
 	}
@@ -142,7 +156,6 @@ func TestMigrationPagesEditorFlow(t *testing.T) {
 func TestMigrationPagesViewOnly(t *testing.T) {
 	f := setupMigPages(t)
 	e := f.e
-	ctx := context.Background()
 	ed := e.client()
 	expectStatus(t, ed.login("editor", "password123"), http.StatusSeeOther)
 	w := ed.post(f.base, url.Values{"title": {"milik editor"}, "sql": {"SELECT 1;"}})
@@ -173,15 +186,20 @@ func TestMigrationPagesViewOnly(t *testing.T) {
 		t.Fatal("View Only berhasil mengubah migration")
 	}
 
-	// Setelah akses diturunkan, tombol hilang dan perubahan ditolak, tanpa harus login ulang.
-	_ = ctx
+	// Akses editor diturunkan di database: berlaku langsung tanpa login ulang.
+	if _, err := e.db.Exec(context.Background(), "UPDATE group_db_access SET level = 'view' WHERE group_id = $1", e.userGroup("editor")); err != nil {
+		t.Fatal(err)
+	}
+	expectStatus(t, ed.do("GET", f.base+"/new", nil), http.StatusForbidden)
+	if strings.Contains(ed.do("GET", f.base, nil).Body.String(), "Buat migration") {
+		t.Fatal("tombol harus hilang setelah akses diturunkan")
+	}
 }
 
 func TestMigrationPagesDenyWithoutGrant(t *testing.T) {
 	f := setupMigPages(t)
 	e := f.e
 
-	// Anonim diarahkan ke login.
 	anon := e.client().do("GET", f.base, nil)
 	expectStatus(t, anon, http.StatusSeeOther)
 	if anon.Header().Get("Location") != "/login" {
@@ -194,7 +212,6 @@ func TestMigrationPagesDenyWithoutGrant(t *testing.T) {
 	expectStatus(t, w, http.StatusSeeOther)
 	path := strings.SplitN(w.Header().Get("Location"), "?", 2)[0]
 
-	// User tanpa grup.
 	o := e.client()
 	expectStatus(t, o.login("outsider", "password123"), http.StatusSeeOther)
 	expectStatus(t, o.do("GET", f.base, nil), http.StatusForbidden)
@@ -207,27 +224,119 @@ func TestMigrationPagesDenyWithoutGrant(t *testing.T) {
 	expectStatus(t, a.do("GET", f.base, nil), http.StatusForbidden)
 	expectStatus(t, a.post(f.base, url.Values{"title": {"x"}, "sql": {"SELECT 1;"}}), http.StatusForbidden)
 
-	// Editor punya akses ke koneksi 1 saja: koneksi 2 dan ID yang tidak ada sama-sama 403
-	// (agar ID tidak bisa ditebak); format ID salah 404.
+	// Koneksi lain dan ID yang tidak ada sama-sama 403 (ID tidak bisa ditebak); format ID salah 404.
 	expectStatus(t, ed.do("GET", fmt.Sprintf("/databases/%d/migrations", f.conn2), nil), http.StatusForbidden)
 	expectStatus(t, ed.do("GET", "/databases/9999/migrations", nil), http.StatusForbidden)
 	expectStatus(t, ed.do("GET", "/databases/abc/migrations", nil), http.StatusNotFound)
 
 	// Migration milik koneksi 1 tidak bisa dibuka lewat koneksi 2 walau user punya akses di sana.
-	gid := e.userGroup("editor")
-	migGrant(e, gid, f.conn2, "edit")
+	migGrant(e, e.userGroup("editor"), f.conn2, "edit")
 	other := fmt.Sprintf("/databases/%d/migrations/", f.conn2) + path[strings.LastIndex(path, "/")+1:]
 	expectStatus(t, ed.do("GET", other, nil), http.StatusNotFound)
 }
 
-// userGroup mengembalikan id grup pertama milik user (dipakai test di atas).
-func (e *testEnv) userGroup(username string) int64 {
-	e.t.Helper()
-	var id int64
-	err := e.db.QueryRow(context.Background(), `SELECT m.group_id FROM group_members m
-		JOIN users u ON u.id = m.user_id WHERE u.username = $1 ORDER BY m.group_id LIMIT 1`, username).Scan(&id)
+func TestMigrationReviewAndExecuteFlow(t *testing.T) {
+	f := setupMigPages(t)
+	e := f.e
+	ctx := context.Background()
+
+	// Koneksi sungguhan ke database sampel; dibuka lewat a.Manager (password terenkripsi).
+	conn := testutil.SeedConnection(t, e.db)
+	migGrant(e, e.userGroup("editor"), conn.ID, "edit")
+	migGrant(e, e.userGroup("viewer"), conn.ID, "view")
+	base := fmt.Sprintf("/databases/%d/migrations", conn.ID)
+
+	target, err := pgxpool.New(ctx, testutil.RequireEnv(t, "TARGET_DB_URL"))
 	if err != nil {
-		e.t.Fatal(err)
+		t.Fatal(err)
 	}
-	return id
+	t.Cleanup(target.Close)
+	const drop = "DROP TABLE IF EXISTS zz_mig_h2, zz_mig_h3 CASCADE"
+	t.Cleanup(func() { target.Exec(context.Background(), drop) }) // berjalan sebelum target.Close
+	if _, err := target.Exec(ctx, drop); err != nil {
+		t.Fatal(err)
+	}
+	tableExists := func(name string) bool {
+		var ok bool
+		if err := target.QueryRow(ctx, "SELECT to_regclass($1) IS NOT NULL", name).Scan(&ok); err != nil {
+			t.Fatal(err)
+		}
+		return ok
+	}
+	count := func(q string) int { return e.count("SELECT count(*) FROM migrations WHERE db_id = $1 AND "+q, conn.ID) }
+
+	ed := e.client()
+	expectStatus(t, ed.login("editor", "password123"), http.StatusSeeOther)
+	create := func(title, sql string) string {
+		w := ed.post(base, url.Values{"title": {title}, "sql": {sql}})
+		expectStatus(t, w, http.StatusSeeOther)
+		return strings.SplitN(w.Header().Get("Location"), "?", 2)[0]
+	}
+
+	// Alur sukses.
+	okSQL := "CREATE TABLE zz_mig_h2 (id int);"
+	path := create("sukses", okSQL)
+	sum := migration.SQLChecksum(okSQL)
+	review := ed.do("GET", path+"/review", nil)
+	expectStatus(t, review, http.StatusOK)
+	if !strings.Contains(review.Body.String(), "CREATE TABLE zz_mig_h2") || !strings.Contains(review.Body.String(), "<strong>v1</strong>") {
+		t.Fatal("review tidak menampilkan SQL dan versi yang akan dipakai")
+	}
+	expectStatus(t, ed.do("POST", path+"/execute", url.Values{"checksum": {sum}, "confirm": {"on"}}), http.StatusForbidden) // tanpa CSRF
+	expectStatus(t, ed.post(path+"/execute", url.Values{"checksum": {sum}}), http.StatusUnprocessableEntity)                // tanpa konfirmasi
+	expectStatus(t, ed.post(path+"/execute", url.Values{"checksum": {"salah"}, "confirm": {"on"}}), http.StatusConflict)    // SQL dianggap berubah
+	if tableExists("zz_mig_h2") || count("status = 'draft'") != 1 {
+		t.Fatal("eksekusi yang ditolak tidak boleh mengubah apa pun")
+	}
+	w := ed.post(path+"/execute", url.Values{"checksum": {sum}, "confirm": {"on"}})
+	expectStatus(t, w, http.StatusSeeOther)
+	loc := w.Header().Get("Location")
+	if !strings.Contains(loc, "ok=migration_success") {
+		t.Fatalf("redirect sukses salah: %s", loc)
+	}
+	detail := ed.do("GET", loc, nil)
+	expectStatus(t, detail, http.StatusOK)
+	if !strings.Contains(detail.Body.String(), "berhasil dijalankan") || !strings.Contains(detail.Body.String(), "Versi 1") {
+		t.Fatal("detail tidak menampilkan hasil sukses dan versi")
+	}
+	if !tableExists("zz_mig_h2") {
+		t.Fatal("tabel tidak terbentuk di target")
+	}
+	if count("status = 'success' AND version = 1 AND executed_by IS NOT NULL") != 1 {
+		t.Fatal("pelaksana dan versi tidak tercatat")
+	}
+	expectStatus(t, ed.post(path+"/execute", url.Values{"checksum": {sum}, "confirm": {"on"}}), http.StatusConflict) // tidak bisa dua kali
+	expectStatus(t, ed.do("GET", path+"/review", nil), http.StatusConflict)
+
+	// Alur gagal: seluruh perubahan di-rollback.
+	badSQL := "CREATE TABLE zz_mig_h3 (id int); INSERT INTO tidak_ada VALUES (1);"
+	bad := create("gagal", badSQL)
+	w = ed.post(bad+"/execute", url.Values{"checksum": {migration.SQLChecksum(badSQL)}, "confirm": {"on"}})
+	expectStatus(t, w, http.StatusSeeOther)
+	loc = w.Header().Get("Location")
+	if strings.Contains(loc, "ok=") {
+		t.Fatalf("migration gagal tidak boleh membawa notifikasi sukses: %s", loc)
+	}
+	failed := ed.do("GET", loc, nil)
+	expectStatus(t, failed, http.StatusOK)
+	if !strings.Contains(failed.Body.String(), "gagal dan di-rollback") || !strings.Contains(failed.Body.String(), "tidak_ada") {
+		t.Fatal("detail tidak menampilkan kegagalan dan pesan error")
+	}
+	if tableExists("zz_mig_h3") {
+		t.Fatal("statement pertama tidak ikut di-rollback")
+	}
+	if count("status = 'success' AND version = 1") != 1 || count("status = 'failed' AND version = 2") != 1 {
+		t.Fatal("versi tidak linear")
+	}
+
+	// View Only tidak boleh meninjau maupun menjalankan.
+	pendingSQL := "CREATE TABLE zz_mig_h3 (id int);"
+	pending := create("menunggu", pendingSQL)
+	v := e.client()
+	expectStatus(t, v.login("viewer", "password123"), http.StatusSeeOther)
+	expectStatus(t, v.do("GET", pending+"/review", nil), http.StatusForbidden)
+	expectStatus(t, v.post(pending+"/execute", url.Values{"checksum": {migration.SQLChecksum(pendingSQL)}, "confirm": {"on"}}), http.StatusForbidden)
+	if count("status = 'draft'") != 1 || tableExists("zz_mig_h3") {
+		t.Fatal("View Only berhasil menjalankan migration")
+	}
 }

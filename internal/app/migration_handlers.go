@@ -13,6 +13,7 @@ import (
 func init() {
 	notices["migration_saved"] = "Draft migration berhasil disimpan."
 	notices["migration_updated"] = "Draft migration berhasil diperbarui."
+	notices["migration_success"] = "Migration berhasil dijalankan dan di-commit."
 }
 
 func (a *App) migrationRoutes() {
@@ -26,6 +27,8 @@ func (a *App) migrationRoutes() {
 	a.mux.Handle("GET /databases/{dbID}/migrations/{id}", login(a.migrationDetail))
 	a.mux.Handle("GET /databases/{dbID}/migrations/{id}/edit", login(a.migrationEdit))
 	a.mux.Handle("POST /databases/{dbID}/migrations/{id}", login(a.migrationUpdate))
+	a.mux.Handle("GET /databases/{dbID}/migrations/{id}/review", login(a.migrationReview))
+	a.mux.Handle("POST /databases/{dbID}/migrations/{id}/execute", login(a.migrationExecute))
 }
 
 type migScope struct {
@@ -62,11 +65,13 @@ func (a *App) migrationError(w http.ResponseWriter, r *http.Request, err error) 
 		a.notFound(w, r)
 	case errors.Is(err, migration.ErrBusy):
 		a.RenderError(w, r, http.StatusConflict, "Sedang Sibuk", err.Error(), false)
-	case errors.Is(err, migration.ErrNotDraft):
-		a.RenderError(w, r, http.StatusConflict, "Tidak Dapat Diubah", err.Error(), false)
 	case errors.Is(err, migration.ErrTargetUnavailable):
 		a.Logger.Error("target database tidak dapat dihubungi", "path", r.URL.Path, "err", err)
 		a.RenderError(w, r, http.StatusBadGateway, "Koneksi Database Gagal", "Database target tidak dapat dihubungi. Periksa koneksi lalu coba lagi.", false)
+	case errors.Is(err, migration.ErrNotDraft):
+		a.RenderError(w, r, http.StatusConflict, "Tidak Dapat Diubah", err.Error(), false)
+	case errors.Is(err, migration.ErrChanged):
+		a.RenderError(w, r, http.StatusConflict, "Tidak Dapat Dijalankan", err.Error(), false)
 	default:
 		a.fail(w, r, err)
 	}
@@ -209,4 +214,63 @@ func (a *App) migrationUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	a.Logger.Info("migration draft updated", "user_id", sc.P.UserID, "db_id", sc.DBID, "migration_id", id)
 	http.Redirect(w, r, fmt.Sprintf("%s/%d?ok=migration_updated", migBase(sc.DBID), id), http.StatusSeeOther)
+}
+
+func (a *App) renderMigrationReview(w http.ResponseWriter, r *http.Request, status int, sc migScope, rv *migration.Review, msg string) {
+	v := a.View(r, "Tinjau Migration", map[string]any{
+		"DBID": sc.DBID, "DBName": sc.Name, "M": rv.M,
+		"NextVersion": rv.NextVersion, "Checksum": rv.Checksum, "Back": migBase(sc.DBID),
+	})
+	v.Error = msg
+	a.Render.Render(w, status, "migration_review", v)
+}
+
+func (a *App) migrationReview(w http.ResponseWriter, r *http.Request) {
+	sc, ok := a.migScope(w, r)
+	if !ok {
+		return
+	}
+	id, ok := pathID(r, "id")
+	if !ok {
+		a.notFound(w, r)
+		return
+	}
+	rv, err := a.Migrations.Review(r.Context(), sc.P, sc.DBID, id)
+	if err != nil {
+		a.migrationError(w, r, err)
+		return
+	}
+	a.renderMigrationReview(w, r, http.StatusOK, sc, rv, "")
+}
+
+func (a *App) migrationExecute(w http.ResponseWriter, r *http.Request) {
+	sc, ok := a.migScope(w, r)
+	if !ok {
+		return
+	}
+	id, ok := pathID(r, "id")
+	if !ok {
+		a.notFound(w, r)
+		return
+	}
+	if r.PostFormValue("confirm") == "" {
+		rv, err := a.Migrations.Review(r.Context(), sc.P, sc.DBID, id)
+		if err != nil {
+			a.migrationError(w, r, err)
+			return
+		}
+		a.renderMigrationReview(w, r, http.StatusUnprocessableEntity, sc, rv, "Centang konfirmasi sebelum menjalankan migration.")
+		return
+	}
+	m, err := a.Migrations.ExecuteReviewed(r.Context(), sc.P, sc.DBID, id, r.PostFormValue("checksum"))
+	if err != nil {
+		a.migrationError(w, r, err)
+		return
+	}
+	a.Logger.Info("migration executed", "user_id", sc.P.UserID, "db_id", sc.DBID, "migration_id", m.ID, "status", string(m.Status))
+	target := fmt.Sprintf("%s/%d", migBase(sc.DBID), m.ID)
+	if m.Status == migration.StatusSuccess {
+		target += "?ok=migration_success"
+	}
+	http.Redirect(w, r, target, http.StatusSeeOther)
 }

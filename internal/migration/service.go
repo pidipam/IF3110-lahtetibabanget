@@ -2,6 +2,9 @@ package migration
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/authz"
 )
@@ -89,4 +92,52 @@ func validateInput(title, sql string) (string, string, error) {
 // CanEdit hanya untuk menentukan tampilan; keputusan akses tetap diambil di Create/Update/Execute.
 func (s *Service) CanEdit(ctx context.Context, p authz.Principal, dbID int64) bool {
 	return s.authz.Can(ctx, p, dbID, authz.EditMigration) == nil
+}
+
+var ErrChanged = errors.New("SQL berubah sejak ditinjau, tinjau ulang sebelum menjalankan")
+
+// SQLChecksum dipakai halaman review untuk memastikan SQL yang dijalankan sama dengan yang ditinjau.
+func SQLChecksum(sql string) string {
+	sum := sha256.Sum256([]byte(sql))
+	return hex.EncodeToString(sum[:])
+}
+
+type Review struct {
+	M           *Migration
+	NextVersion int
+	Checksum    string
+}
+
+// Review menyiapkan data halaman tinjauan. Hanya View + Edit, hanya untuk draft.
+func (s *Service) Review(ctx context.Context, p authz.Principal, dbID, id int64) (*Review, error) {
+	if err := s.authz.Can(ctx, p, dbID, authz.EditMigration); err != nil {
+		return nil, err
+	}
+	m, err := s.repo.Get(ctx, dbID, id)
+	if err != nil {
+		return nil, err
+	}
+	if !m.Status.Editable() {
+		return nil, ErrNotDraft
+	}
+	max, err := s.repo.MaxVersion(ctx, dbID)
+	if err != nil {
+		return nil, err
+	}
+	return &Review{M: m, NextVersion: NextVersion(max), Checksum: SQLChecksum(m.SQL)}, nil
+}
+
+// ExecuteReviewed menjalankan draft hanya bila SQL-nya masih sama dengan yang ditinjau.
+func (s *Service) ExecuteReviewed(ctx context.Context, p authz.Principal, dbID, id int64, checksum string) (*Migration, error) {
+	if err := s.authz.Can(ctx, p, dbID, authz.EditMigration); err != nil {
+		return nil, err
+	}
+	m, err := s.repo.Get(ctx, dbID, id)
+	if err != nil {
+		return nil, err
+	}
+	if SQLChecksum(m.SQL) != checksum {
+		return nil, ErrChanged
+	}
+	return s.exec.Execute(ctx, dbID, id, p.UserID)
 }
