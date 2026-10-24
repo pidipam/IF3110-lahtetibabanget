@@ -1,0 +1,25 @@
+{{define "content"}}
+<section class="hero">
+    <h1>Halo, {{.User.Username}}</h1>
+    <p>
+        Anda masuk sebagai
+        {{if .User.IsAdmin}}
+            <span class="badge admin">Platform Admin</span>
+        {{else}}
+            <span class="badge">User</span>
+        {{end}}
+    </p>
+</section>
+<div class="card">
+    <h2>Grup Anda</h2>
+    {{with .Data.Groups}}
+        <ul>
+            {{range .}}
+                <li>{{.Name}}{{if .Description}} <span class="muted">· {{.Description}}</span>{{end}}</li>
+            {{end}}
+        </ul>
+    {{else}}
+        <p class="muted">Anda belum tergabung di grup mana pun sehingga belum punya akses ke database.</p>
+    {{end}}
+</div>
+{{end}}

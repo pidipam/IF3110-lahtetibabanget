@@ -1,0 +1,31 @@
+{{define "content"}}
+{{$m := .Data.M}}
+<div class="card">
+    <h1>Tinjau sebelum menjalankan</h1>
+    <table>
+        <tbody>
+            <tr><th>Database target</th><td><strong>{{.Data.DBName}}</strong></td></tr>
+            <tr><th>Judul</th><td>{{$m.Title}}</td></tr>
+            <tr><th>Versi yang akan dipakai</th><td><strong>v{{.Data.NextVersion}}</strong></td></tr>
+        </tbody>
+    </table>
+</div>
+<div class="card">
+    <h2>SQL yang akan dijalankan</h2>
+    <pre style="margin:0;padding:16px;overflow:auto;white-space:pre-wrap;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.04);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px">{{$m.SQL}}</pre>
+    <p class="muted">Seluruh SQL dijalankan dalam satu transaction. Jika ada statement yang gagal, semua perubahan di-rollback dan migration tercatat gagal.</p>
+    <form method="post" action="{{.Data.Back}}/{{$m.ID}}/execute">
+        <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+        <input type="hidden" name="checksum" value="{{.Data.Checksum}}">
+        <label class="check">
+            <input type="checkbox" name="confirm" required>
+            Saya sudah memeriksa SQL ini dan ingin menjalankannya pada {{.Data.DBName}}
+        </label>
+        <p>
+            <button type="submit">Jalankan migration</button>
+            <a class="btn secondary" href="{{.Data.Back}}/{{$m.ID}}/edit">Edit SQL</a>
+            <a class="btn secondary" href="{{.Data.Back}}/{{$m.ID}}">Batal</a>
+        </p>
+    </form>
+</div>
+{{end}}

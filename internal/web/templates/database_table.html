@@ -1,0 +1,134 @@
+{{define "content"}}
+{{$t := .Data.Table}}
+{{$p := .Data.Page.Pagination}}
+<div class="card">
+    <div class="row">
+        <h1>{{$t.FullName}}</h1>
+        <span class="badge">{{$t.Kind.Label}}</span>
+        <span class="spacer"></span>
+        <a class="btn secondary" href="{{.Data.DBHref}}">{{.Data.Conn.Name}}</a>
+    </div>
+</div>
+<div class="card">
+    <h2>Kolom</h2>
+    <div class="scroll">
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Nama</th>
+                    <th>Tipe</th>
+                    <th>Null</th>
+                    <th>Default</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range $t.Columns}}
+                    <tr>
+                        <td class="muted">{{.Position}}</td>
+                        <td>{{.Name}}</td>
+                        <td class="mono">{{.Type}}</td>
+                        <td>{{if .Nullable}}ya{{else}}tidak{{end}}</td>
+                        <td class="mono muted">{{if .HasDefault}}{{.Default}}{{end}}</td>
+                    </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+<div class="card">
+    <h2>Constraint</h2>
+    {{with $t.Constraints}}
+        <div class="scroll">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Nama</th>
+                        <th>Jenis</th>
+                        <th>Definisi</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .}}
+                        <tr>
+                            <td>{{.Name}}</td>
+                            <td><span class="badge">{{.Type}}</span></td>
+                            <td class="mono muted">{{.Definition}}</td>
+                        </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+    {{else}}
+        <p class="muted">Tidak ada constraint.</p>
+    {{end}}
+</div>
+<div class="card">
+    <h2>Index</h2>
+    {{with $t.Indexes}}
+        <div class="scroll">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Nama</th>
+                        <th>Definisi</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .}}
+                        <tr>
+                            <td>{{.Name}}{{if .Primary}} <span class="badge">primary</span>{{else if .Unique}} <span class="badge">unique</span>{{end}}</td>
+                            <td class="mono muted">{{.Definition}}</td>
+                        </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+    {{else}}
+        <p class="muted">Tidak ada index.</p>
+    {{end}}
+</div>
+<div class="card">
+    <h2>Data</h2>
+    <p class="muted">{{.Data.OrderNote}}</p>
+    {{if $p.Total}}
+        <p class="muted">Menampilkan {{$p.From}}-{{$p.To}} dari {{$p.Total}} baris (halaman {{$p.Page}} dari {{$p.TotalPages}}).</p>
+    {{else}}
+        <p class="muted">Tidak ada data.</p>
+    {{end}}
+    {{if .Data.Page.Rows}}
+        <div class="scroll">
+            <table>
+                <thead>
+                    <tr>
+                        {{range .Data.Page.Columns}}<th>{{.}}</th>{{end}}
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Data.Page.Rows}}
+                        <tr>
+                            {{range .}}
+                                <td class="cell">{{if .Null}}<span class="null">NULL</span>{{else}}{{.Text}}{{if .Truncated}}<span class="muted" title="Teks dipotong">&hellip;</span>{{end}}{{end}}</td>
+                            {{end}}
+                        </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+    {{end}}
+    <div class="pager">
+        {{if .Data.PrevHref}}<a class="btn secondary" href="{{.Data.PrevHref}}">Sebelumnya</a>{{end}}
+        {{if .Data.NextHref}}<a class="btn secondary" href="{{.Data.NextHref}}">Berikutnya</a>{{end}}
+        <span class="spacer"></span>
+        <form method="get" action="{{.Data.Base}}" class="row">
+            <label for="page_size" class="muted">Baris per halaman</label>
+            <select id="page_size" name="page_size">
+                {{range .Data.PageSizes}}
+                    <option value="{{.}}"{{if eq . $p.PageSize}} selected{{end}}>{{.}}</option>
+                {{end}}
+            </select>
+            <button type="submit" class="ghost">Terapkan</button>
+        </form>
+    </div>
+</div>
+{{end}}

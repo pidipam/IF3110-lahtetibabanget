@@ -1,0 +1,35 @@
+{{define "content"}}
+<div class="card">
+    <div class="row">
+        <h1>Kelola User</h1>
+        <span class="spacer"></span>
+        <a class="btn" href="/admin/users/new">Tambah user</a>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>Username</th>
+                <th>Peran</th>
+                <th>Status</th>
+                <th>Dibuat</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Data.Users}}
+                <tr>
+                    <td>{{.Username}}</td>
+                    <td>{{if .IsAdmin}}<span class="badge admin">Admin</span>{{else}}<span class="badge">User</span>{{end}}</td>
+                    <td>{{if .IsActive}}Aktif{{else}}<span class="badge off">Nonaktif</span>{{end}}</td>
+                    <td class="muted">{{.CreatedAt.Format "02 Jan 2006"}}</td>
+                    <td><a href="/admin/users/{{.ID}}">Edit</a></td>
+                </tr>
+            {{else}}
+                <tr>
+                    <td colspan="5" class="muted">Belum ada user.</td>
+                </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}

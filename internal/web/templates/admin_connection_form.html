@@ -1,0 +1,69 @@
+{{define "content"}}
+{{$c := .Data.Conn}}
+{{$f := .Data.Form}}
+<div class="card">
+    <h1>{{if $c}}Edit Koneksi {{$c.Name}}{{else}}Tambah Koneksi{{end}}</h1>
+    <form method="post" action="{{if $c}}/admin/connections/{{$c.ID}}{{else}}/admin/connections{{end}}">
+        <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+        <label for="name">Nama koneksi</label>
+        <input type="text" id="name" name="name" value="{{$f.Name}}" required>
+        <label for="host">Host</label>
+        <input type="text" id="host" name="host" value="{{$f.Host}}" required>
+        <label for="port">Port</label>
+        <input type="text" id="port" name="port" inputmode="numeric" value="{{$f.Port}}" required>
+        <label for="db_name">Nama database</label>
+        <input type="text" id="db_name" name="db_name" value="{{$f.DBName}}" required>
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" value="{{$f.Username}}" autocomplete="off" required>
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" autocomplete="new-password"{{if not $c}} required{{end}}>
+        {{if $c}}<p class="muted">Kosongkan untuk mempertahankan password yang tersimpan. Password tidak pernah ditampilkan kembali.</p>{{end}}
+        <label for="sslmode">SSL mode</label>
+        <select id="sslmode" name="sslmode">
+            {{range .Data.SSLModes}}
+                <option value="{{.}}"{{if eq . $f.SSLMode}} selected{{end}}>{{.}}</option>
+            {{end}}
+        </select>
+        <p>
+            <button type="submit">{{if $c}}Simpan perubahan{{else}}Simpan{{end}}</button>
+            <button type="submit" class="secondary" formaction="{{if $c}}/admin/connections/{{$c.ID}}/test{{else}}/admin/connections/test{{end}}">Test connection</button>
+            <a class="btn secondary" href="/admin/connections">Kembali</a>
+        </p>
+    </form>
+</div>
+{{if $c}}
+<div class="card">
+    <h2>Grup dengan akses</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Grup</th>
+                <th>Level</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Data.Grants}}
+                <tr>
+                    <td>{{.GroupName}}</td>
+                    <td>{{.Level.Label}}</td>
+                    <td><a href="/admin/groups/{{.GroupID}}/access">Atur</a></td>
+                </tr>
+            {{else}}
+                <tr>
+                    <td colspan="3" class="muted">Belum ada grup yang punya akses ke database ini.</td>
+                </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+<div class="card">
+    <h2>Hapus Koneksi</h2>
+    <p class="muted">Semua grup kehilangan akses ke database ini dan sesi anggotanya diakhiri. Koneksi yang sudah punya riwayat migration tidak dapat dihapus.</p>
+    <form method="post" action="/admin/connections/{{$c.ID}}/delete">
+        <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+        <button type="submit" class="danger">Hapus koneksi</button>
+    </form>
+</div>
+{{end}}
+{{end}}

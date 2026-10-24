@@ -1,0 +1,14 @@
+{{define "content"}}
+<section class="hero">
+    <h1>{{.Data.Code}}</h1>
+    <p>{{.Title}}</p>
+</section>
+<div class="card narrow">
+    <p>{{.Data.Message}}</p>
+    {{if .Data.ShowLogin}}
+        <a class="btn" href="/login">Login kembali</a>
+    {{else}}
+        <a class="btn secondary" href="/">Kembali ke beranda</a>
+    {{end}}
+</div>
+{{end}}

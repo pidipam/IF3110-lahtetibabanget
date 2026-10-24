@@ -1,0 +1,40 @@
+{{define "content"}}
+<div class="card">
+    <h1>Kelola Grup</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>Nama</th>
+                <th>Deskripsi</th>
+                <th>Anggota</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Data.Groups}}
+                <tr>
+                    <td>{{.Name}}</td>
+                    <td class="muted">{{.Description}}</td>
+                    <td>{{.MemberCount}}</td>
+                    <td><a href="/admin/groups/{{.ID}}">Kelola</a></td>
+                </tr>
+            {{else}}
+                <tr>
+                    <td colspan="4" class="muted">Belum ada grup.</td>
+                </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+<div class="card">
+    <h2>Tambah Grup</h2>
+    <form method="post" action="/admin/groups">
+        <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+        <label for="name">Nama</label>
+        <input type="text" id="name" name="name" value="{{.Data.Name}}" required>
+        <label for="description">Deskripsi</label>
+        <input type="text" id="description" name="description" value="{{.Data.Description}}">
+        <p><button type="submit">Tambah</button></p>
+    </form>
+</div>
+{{end}}

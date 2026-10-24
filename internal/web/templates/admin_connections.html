@@ -1,0 +1,37 @@
+{{define "content"}}
+<div class="card">
+    <div class="row">
+        <h1>Kelola Koneksi</h1>
+        <span class="spacer"></span>
+        <a class="btn" href="/admin/connections/new">Tambah koneksi</a>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>Nama</th>
+                <th>Host</th>
+                <th>Database</th>
+                <th>User</th>
+                <th>SSL</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Data.Conns}}
+                <tr>
+                    <td>{{.Name}}</td>
+                    <td class="muted">{{.Host}}:{{.Port}}</td>
+                    <td>{{.DBName}}</td>
+                    <td class="muted">{{.Username}}</td>
+                    <td class="muted">{{.SSLMode}}</td>
+                    <td><a href="/admin/connections/{{.ID}}">Kelola</a></td>
+                </tr>
+            {{else}}
+                <tr>
+                    <td colspan="6" class="muted">Belum ada koneksi database.</td>
+                </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}

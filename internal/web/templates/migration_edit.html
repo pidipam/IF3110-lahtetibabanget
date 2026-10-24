@@ -1,0 +1,18 @@
+{{define "content"}}
+<div class="card">
+    <h1>{{.Data.Heading}}</h1>
+    <p class="muted">Database target: <strong>{{.Data.DBName}}</strong>. Migration disimpan sebagai draft dan belum dijalankan.</p>
+    <form method="post" action="{{.Data.Action}}">
+        <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+        <label for="title">Judul</label>
+        <input type="text" id="title" name="title" value="{{.Data.Title}}" maxlength="100" required>
+        <label for="sql">SQL</label>
+        <textarea id="sql" name="sql" required spellcheck="false" style="max-width:none;min-height:320px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px">{{.Data.SQL}}</textarea>
+        <p class="muted">Satu migration boleh berisi beberapa statement. Jangan menulis BEGIN, COMMIT, atau ROLLBACK karena transaksi dikelola platform.</p>
+        <p>
+            <button type="submit">Simpan draft</button>
+            <a class="btn secondary" href="{{.Data.Back}}">Batal</a>
+        </p>
+    </form>
+</div>
+{{end}}

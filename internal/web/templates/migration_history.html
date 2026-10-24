@@ -1,0 +1,38 @@
+{{define "content"}}
+<div class="card">
+    <div class="row">
+        <h1>Riwayat Migration</h1>
+        <span class="spacer"></span>
+        {{if .Data.CanEdit}}<a class="btn" href="/databases/{{.Data.DBID}}/migrations/new">Buat migration</a>{{end}}
+    </div>
+    <p class="muted">Database <strong>{{.Data.DBName}}</strong> · Akses Anda: {{if .Data.CanEdit}}View + Edit{{else}}View Only{{end}}</p>
+    <table>
+        <thead>
+            <tr>
+                <th>Versi</th>
+                <th>Judul</th>
+                <th>Status</th>
+                <th>Pelaksana</th>
+                <th>Dibuat</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Data.Migrations}}
+                <tr>
+                    <td>{{if .Version}}v{{.Version}}{{else}}<span class="muted">-</span>{{end}}</td>
+                    <td>{{.Title}}</td>
+                    <td><span class="badge{{if eq .Status "success"}} admin{{else if eq .Status "failed"}} off{{end}}">{{.Status.Label}}</span></td>
+                    <td>{{if .ExecutedByName}}{{.ExecutedByName}}{{else}}<span class="muted">{{.CreatedByName}} (pembuat)</span>{{end}}</td>
+                    <td class="muted">{{.CreatedAt.Format "02 Jan 2006 15:04"}}</td>
+                    <td><a href="/databases/{{$.Data.DBID}}/migrations/{{.ID}}">Detail</a></td>
+                </tr>
+            {{else}}
+                <tr>
+                    <td colspan="6" class="muted">Belum ada migration pada database ini.</td>
+                </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}
