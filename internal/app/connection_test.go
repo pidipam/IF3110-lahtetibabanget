@@ -163,7 +163,10 @@ func TestAdminConnectionTestButton(t *testing.T) {
 	e := setup(t)
 	admin := e.loginAs("admin", true)
 
-	w := admin.post("/admin/connections/test", connValues("baru"))
+	valid := connValues("baru")
+	valid.Set("password", "app")
+
+	w := admin.post("/admin/connections/test", valid)
 	expectStatus(t, w, http.StatusOK)
 	if !strings.Contains(w.Body.String(), "Test koneksi berhasil.") {
 		t.Fatal("test koneksi yang benar harus berhasil")
@@ -173,6 +176,7 @@ func TestAdminConnectionTestButton(t *testing.T) {
 	}
 
 	bad := connValues("baru")
+	bad.Set("password", "app")
 	bad.Set("port", fmt.Sprint(closedPort))
 	w = admin.post("/admin/connections/test", bad)
 	expectStatus(t, w, http.StatusOK)
