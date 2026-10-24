@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -9,27 +10,33 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/auth"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/authz"
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/migration"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/users"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/web"
 )
 
 type Options struct {
-	DB *pgxpool.Pool
-	Session auth.SessionConfig
-	Secure bool
-	Logger *slog.Logger
+	DB               *pgxpool.Pool
+	Session          auth.SessionConfig
+	Secure           bool
+	Logger           *slog.Logger
+	Targets          migration.Targets
+	StatementTimeout time.Duration
 }
 
 type App struct {
-	Users *users.Store
-	Sessions *auth.SessionStore
-	Authz *authz.Authorizer
-	Auth *auth.Manager
-	Render *web.Renderer
-	Logger *slog.Logger
-	mux *http.ServeMux
-	handler http.Handler
+	Users         *users.Store
+	Sessions      *auth.SessionStore
+	Authz         *authz.Authorizer
+	Auth          *auth.Manager
+	Render        *web.Renderer
+	Logger        *slog.Logger
+	mux           *http.ServeMux
+	handler       http.Handler
+	Migrations    *migration.Service
+	migrationExec *migration.Executor
 }
+
 var notices = map[string]string{"user_created": "User berhasil dibuat.", "user_updated": "User berhasil diperbarui.", "password_reset": "Password berhasil direset dan semua sesi user tersebut diakhiri.", "group_created": "Grup berhasil dibuat.", "group_updated": "Grup berhasil diperbarui.", "group_deleted": "Grup berhasil dihapus.", "member_added": "Anggota berhasil ditambahkan.", "member_removed": "Anggota berhasil dikeluarkan."}
 
 func New(opt Options) (*App, error) {
@@ -43,6 +50,13 @@ func New(opt Options) (*App, error) {
 	}
 	a := &App{Users: users.NewStore(opt.DB), Sessions: auth.NewSessionStore(opt.DB, opt.Session), Authz: authz.New(authz.NewPGStore(opt.DB)), Render: rd, Logger: logger, mux: http.NewServeMux()}
 	a.Auth = &auth.Manager{Sessions: a.Sessions, Users: a.Users, Secure: opt.Secure, Unauthorized: a.unauthorized, Forbidden: a.forbidden, Fail: a.fail}
+
+	if opt.Targets != nil {
+		repo := migration.NewRepository(opt.DB)
+		a.migrationExec = migration.NewExecutor(opt.DB, repo, opt.Targets, opt.StatementTimeout)
+		a.Migrations = migration.NewService(repo, a.migrationExec, a.Authz)
+	}
+
 	a.routes()
 	a.handler = securityHeaders(a.logRequests(a.Auth.LoadSession(a.mux)))
 	return a, nil
@@ -104,4 +118,12 @@ func securityHeaders(next http.Handler) http.Handler {
 		h.Set("Cache-Control", "no-store")
 		next.ServeHTTP(w, r)
 	})
+}
+
+// RecoverMigrations menandai migration yang tertinggal berstatus running sebagai failed.
+func (a *App) RecoverMigrations(ctx context.Context) (int64, error) {
+	if a.migrationExec == nil {
+		return 0, nil
+	}
+	return a.migrationExec.RecoverStuck(ctx)
 }

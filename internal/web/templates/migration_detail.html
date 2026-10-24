@@ -1,0 +1,33 @@
+{{define "content"}}
+{{$m := .Data.M}}
+<div class="card">
+    <div class="row">
+        <h1>{{$m.Title}}</h1>
+        <span class="spacer"></span>
+        <span class="badge{{if eq $m.Status "success"}} admin{{else if eq $m.Status "failed"}} off{{end}}">{{$m.Status.Label}}</span>
+    </div>
+    <p class="muted">Database <strong>{{.Data.DBName}}</strong>{{if $m.Version}} · Versi {{$m.Version}}{{end}}</p>
+    {{if eq $m.Status "success"}}<div class="alert ok">Migration berhasil dijalankan dan di-commit.</div>{{end}}
+    {{if eq $m.Status "failed"}}<div class="alert error"><strong>Migration gagal dan di-rollback.</strong> Tidak ada perubahan dari migration ini yang tersimpan.{{if $m.ErrorMessage}}<br>{{$m.ErrorMessage}}{{end}}</div>{{end}}
+    <table>
+        <tbody>
+            <tr><th>Dibuat oleh</th><td>{{$m.CreatedByName}}</td></tr>
+            <tr><th>Dibuat pada</th><td>{{$m.CreatedAt.Format "02 Jan 2006 15:04:05"}}</td></tr>
+            <tr><th>Dijalankan oleh</th><td>{{if $m.ExecutedByName}}{{$m.ExecutedByName}}{{else}}<span class="muted">-</span>{{end}}</td></tr>
+            <tr><th>Mulai</th><td>{{with $m.StartedAt}}{{.Format "02 Jan 2006 15:04:05"}}{{else}}<span class="muted">-</span>{{end}}</td></tr>
+            <tr><th>Selesai</th><td>{{with $m.FinishedAt}}{{.Format "02 Jan 2006 15:04:05"}}{{else}}<span class="muted">-</span>{{end}}</td></tr>
+        </tbody>
+    </table>
+</div>
+<div class="card">
+    <h2>SQL</h2>
+    <pre style="margin:0;padding:16px;overflow:auto;white-space:pre-wrap;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.04);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px">{{$m.SQL}}</pre>
+    <p>
+        <a class="btn secondary" href="{{.Data.Back}}">Kembali ke riwayat</a>
+        {{if and .Data.CanEdit $m.Status.Editable}}
+            <a class="btn secondary" href="{{.Data.Back}}/{{$m.ID}}/edit">Edit</a>
+            <a class="btn" href="{{.Data.Back}}/{{$m.ID}}/review">Tinjau dan jalankan</a>
+        {{end}}
+    </p>
+</div>
+{{end}}

@@ -13,6 +13,7 @@ import (
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/app"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/auth"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/config"
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/migration"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/platformdb"
 )
 
@@ -36,7 +37,18 @@ func run(logger *slog.Logger) error {
 	if err := platformdb.Migrate(ctx, db); err != nil {
 		return err
 	}
-	a, err := app.New(app.Options{DB: db, Session: auth.SessionConfig{IdleTimeout: cfg.IdleTimeout, AbsoluteTimeout: cfg.AbsoluteTimeout, RotateInterval: cfg.RotateInterval, GracePeriod: cfg.GracePeriod}, Secure: cfg.Production, Logger: logger})
+
+	var targets migration.Targets
+	if url := os.Getenv("TARGET_DATABASE_URL"); url != "" {
+		st, err := migration.NewStaticTargets(ctx, 1, "target-lokal", url)
+		if err != nil {
+			return err
+		}
+		defer st.Close()
+		targets = st
+	}
+
+	a, err := app.New(app.Options{DB: db, Session: auth.SessionConfig{IdleTimeout: cfg.IdleTimeout, AbsoluteTimeout: cfg.AbsoluteTimeout, RotateInterval: cfg.RotateInterval, GracePeriod: cfg.GracePeriod}, Secure: cfg.Production, Logger: logger, Targets: targets})
 	if err != nil {
 		return err
 	}
@@ -47,6 +59,13 @@ func run(logger *slog.Logger) error {
 	if created {
 		logger.Info("admin pertama dibuat", "username", cfg.AdminUsername)
 	}
+
+	if n, err := a.RecoverMigrations(ctx); err != nil {
+		return err
+	} else if n > 0 {
+		logger.Warn("migration tertinggal berstatus running ditandai gagal", "jumlah", n)
+	}
+
 	go cleanupSessions(ctx, a.Sessions, logger)
 	srv := &http.Server{Addr: cfg.Addr, Handler: a, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 120 * time.Second}
 	go func() {

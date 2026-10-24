@@ -85,3 +85,8 @@ func validateInput(title, sql string) (string, string, error) {
 	}
 	return title, sql, nil
 }
+
+// CanEdit hanya untuk menentukan tampilan; keputusan akses tetap diambil di Create/Update/Execute.
+func (s *Service) CanEdit(ctx context.Context, p authz.Principal, dbID int64) bool {
+	return s.authz.Can(ctx, p, dbID, authz.EditMigration) == nil
+}

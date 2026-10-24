@@ -22,5 +22,6 @@ func (a *App) routes() {
 	a.mux.Handle("POST /admin/groups/{id}/delete", admin(a.adminGroupDelete))
 	a.mux.Handle("POST /admin/groups/{id}/members", admin(a.adminGroupAddMember))
 	a.mux.Handle("POST /admin/groups/{id}/members/{userID}/delete", admin(a.adminGroupRemoveMember))
+	a.migrationRoutes()
 	a.mux.HandleFunc("/", a.notFound)
 }
