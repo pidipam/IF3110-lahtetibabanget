@@ -181,8 +181,8 @@ internal/db           seed database sampel
 
 ## Tim
 
-| Bagian | Anggota | NIM |
+| Anggota | NIM | Pembagian Tugas |
 |---|---|---|
-| Autentikasi, session, otorisasi, kelola user dan grup | Helena Kristela Sarhawa | 13524109 |
-| Fondasi, koneksi database, viewer | Vara Azzara Ramli Pulukadang | 13524091 |
-| Migration, dokumentasi | Keisha Rizka Syofyani | 13524073 |
+| Helena Kristela Sarhawa | 13524109 | Access Control, Autentikasi, Sesi, Otorisasi, Manajemen User & Grup |
+| Vara Azzara Ramli Pulukadang | 13524091 | Database Management, Encrypted Connection, Metadata Explorer, Data Viewer |
+| Keisha Rizka Syofyani | 13524073 | Migration Engine, Transaksi & Locking, History, Dokumentasi, README |
