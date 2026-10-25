@@ -17,13 +17,13 @@ type Table struct {
 
 type Column struct {
 	Name       string
-	Type       string  
+	Type       string
 	NotNull    bool
 	HasDefault bool
-	Default    string 
-	Identity   string 
-	Generated  string 
-	Expression string 
+	Default    string
+	Identity   string
+	Generated  string
+	Expression string
 }
 
 const (
@@ -37,18 +37,18 @@ const (
 type Constraint struct {
 	Name       string
 	Type       string
-	Definition string 
+	Definition string
 }
 
 type Index struct {
 	Name   string
 	Unique bool
-	Body   string 
+	Body   string
 }
 
 type View struct {
 	Name       string
-	Definition string 
+	Definition string
 }
 
 type Enum struct {
@@ -58,7 +58,7 @@ type Enum struct {
 
 type Sequence struct {
 	Name        string
-	OwnerTable  string 
+	OwnerTable  string
 	OwnerColumn string
 }
 

@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	previewTimeout = 25 * time.Second
+	previewTimeout            = 25 * time.Second
 	previewStatementTimeoutMS = "20000"
 	previewLockTimeout        = "5s"
 	scratchPrefix             = "zz_schemadiff_"

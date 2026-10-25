@@ -298,7 +298,6 @@ func TestSchemaDiffSaveDraftAndExecute(t *testing.T) {
 	expectStatus(t, review, http.StatusOK)
 	contains(t, review.Body.String(), "CREATE TABLE public.zz_sd_app_books")
 
-	
 	sum := migration.SQLChecksum(strings.TrimSpace(savedSQL))
 	expectStatus(t, f.ed.post(path+"/execute", url.Values{"checksum": {"salah"}, "confirm": {"on"}}), http.StatusConflict)
 	if schemaDiffRelationExists(t, f.pool, "public.zz_sd_app_books") {
@@ -315,7 +314,7 @@ func TestSchemaDiffSaveDraftAndExecute(t *testing.T) {
 	if f.e.count("SELECT count(*) FROM migrations WHERE db_id = $1 AND status = 'success' AND version = 1", f.conn.ID) != 1 {
 		t.Fatal("migration sukses tidak tercatat dengan versi 1")
 	}
-	 
+
 	w = f.view.post(f.base+"/migration", url.Values{"title": {"retas"}, "schema": {"public"}, "sql": {"SELECT 1;"}})
 	expectStatus(t, w, http.StatusForbidden)
 
