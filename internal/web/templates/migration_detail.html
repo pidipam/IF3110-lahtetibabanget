@@ -4,7 +4,7 @@
     <div class="row">
         <h1>{{$m.Title}}</h1>
         <span class="spacer"></span>
-        <span class="badge{{if eq $m.Status "success"}} admin{{else if eq $m.Status "failed"}} off{{end}}">{{$m.Status.Label}}</span>
+        {{if not $m.Status.Final}}<span class="badge">{{$m.Status.Label}}</span>{{end}}
     </div>
     <p class="muted">Database <strong>{{.Data.DBName}}</strong>{{if $m.Version}} · Versi {{$m.Version}}{{end}}</p>
     {{if eq $m.Status "success"}}<div class="alert ok">Migration berhasil dijalankan dan di-commit.</div>{{end}}
