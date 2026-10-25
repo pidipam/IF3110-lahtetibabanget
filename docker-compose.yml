@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: dbmp
     ports:
-      - "5434:5433"
+      - "5434:5432"
     volumes:
       - platform-data:/var/lib/postgresql/data
   test-db:
@@ -16,7 +16,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: dbmp_test
     ports:
-      - "5433:5434"
+      - "5433:5432"
   target-db:
     image: postgres:16
     environment:
