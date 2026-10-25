@@ -30,6 +30,7 @@ func (a *App) migrationRoutes() {
 	a.mux.Handle("POST /databases/{dbID}/migrations/{id}", login(a.migrationUpdate))
 	a.mux.Handle("GET /databases/{dbID}/migrations/{id}/review", login(a.migrationReview))
 	a.mux.Handle("POST /databases/{dbID}/migrations/{id}/execute", login(a.migrationExecute))
+	a.mux.Handle("POST /databases/{dbID}/migrations/{id}/explain", login(a.migrationExplain))
 }
 
 type migScope struct {
@@ -217,9 +218,13 @@ func (a *App) migrationUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) renderMigrationReview(w http.ResponseWriter, r *http.Request, status int, sc migScope, rv *migration.Review, msg string) {
+	a.renderMigrationReviewWith(w, r, status, sc, rv, msg, nil)
+}
+
+func (a *App) renderMigrationReviewWith(w http.ResponseWriter, r *http.Request, status int, sc migScope, rv *migration.Review, msg string, ex *migration.Explanation) {
 	v := a.View(r, "Tinjau Migration", map[string]any{
 		"DBID": sc.DBID, "DBName": sc.Name, "M": rv.M,
-		"NextVersion": rv.NextVersion, "Checksum": rv.Checksum, "Back": migBase(sc.DBID),
+		"NextVersion": rv.NextVersion, "Checksum": rv.Checksum, "Back": migBase(sc.DBID), "Explain": ex,
 	})
 	v.Error = msg
 	a.Render.Render(w, status, "migration_review", v)
@@ -296,4 +301,29 @@ func (a *App) migrationTargetDown(w http.ResponseWriter, r *http.Request, err er
 		"Conn": c, "Message": kind.UserMessage(), "Code": http.StatusServiceUnavailable, "Retry": migBase(c.ID),
 	})
 	a.Render.Render(w, http.StatusServiceUnavailable, "database_error", v)
+}
+
+func (a *App) migrationExplain(w http.ResponseWriter, r *http.Request) {
+	sc, ok := a.migScope(w, r)
+	if !ok {
+		return
+	}
+	id, ok := pathID(r, "id")
+	if !ok {
+		a.notFound(w, r)
+		return
+	}
+	rv, err := a.Migrations.Review(r.Context(), sc.P, sc.DBID, id)
+	if err != nil {
+		a.migrationError(w, r, err)
+		return
+	}
+	analyze := r.PostFormValue("mode") == "analyze"
+	ex, err := a.Migrations.Explain(r.Context(), sc.P, sc.DBID, id, analyze)
+	if err != nil {
+		a.migrationError(w, r, err)
+		return
+	}
+	a.Logger.Info("migration explained", "user_id", sc.P.UserID, "db_id", sc.DBID, "migration_id", id, "analyze", analyze)
+	a.renderMigrationReviewWith(w, r, http.StatusOK, sc, rv, "", ex)
 }

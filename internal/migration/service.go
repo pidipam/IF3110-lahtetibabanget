@@ -141,3 +141,17 @@ func (s *Service) ExecuteReviewed(ctx context.Context, p authz.Principal, dbID, 
 	}
 	return s.exec.Execute(ctx, dbID, id, p.UserID)
 }
+
+func (s *Service) Explain(ctx context.Context, p authz.Principal, dbID, id int64, analyze bool) (*Explanation, error) {
+	if err := s.authz.Can(ctx, p, dbID, authz.EditMigration); err != nil {
+		return nil, err
+	}
+	m, err := s.repo.Get(ctx, dbID, id)
+	if err != nil {
+		return nil, err
+	}
+	if !m.Status.Editable() {
+		return nil, ErrNotDraft
+	}
+	return s.exec.Explain(ctx, dbID, m.SQL, analyze)
+}
