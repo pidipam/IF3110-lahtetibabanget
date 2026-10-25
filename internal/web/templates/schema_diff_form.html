@@ -1,0 +1,58 @@
+{{define "content"}}
+{{$c := .Data.Conn}}
+<div class="card">
+    <div class="row">
+        <h1>Schema diff</h1>
+        <span class="spacer"></span>
+        <a class="btn secondary" href="{{.Data.Back}}">Kembali</a>
+    </div>
+    <p class="muted">
+        Bandingkan schema <strong>{{$c.Name}}</strong> dengan kondisi DDL yang diinginkan untuk 
+        membuat draft migrasi SQL.
+    </p>
+    {{if .Data.Schemas}}
+    <form method="get" action="{{.Data.Action}}">
+        <label for="schema">Schema</label>
+        <div class="row">
+            <select id="schema" name="schema" onchange="this.form.submit()" style="max-width:280px">
+                {{$selected := .Data.Schema}}
+                {{range .Data.Schemas}}
+                    <option value="{{.}}"{{if eq . $selected}} selected{{end}}>{{.}}</option>
+                {{end}}
+            </select>
+            <noscript><button type="submit" class="secondary">Muat schema</button></noscript>
+        </div>
+    </form>
+    {{end}}
+</div>
+
+{{if .Data.Schema}}
+<div class="card">
+    <h2>Kondisi DDL yang diinginkan</h2>
+    <p class="muted">Ubah DDL yang sudah diisi 
+        <span class="mono">{{.Data.Schema}}</span>, lalu tekan <strong>Bandingkan</strong>.</p>
+    <form method="post" action="{{.Data.Action}}">
+        <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+        <input type="hidden" name="schema" value="{{.Data.Schema}}">
+        <label for="desired_ddl">DDL</label>
+        <textarea id="desired_ddl" name="desired_ddl" required spellcheck="false"
+            style="max-width:none;min-height:420px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px">{{.Data.Desired}}</textarea>
+        <label class="check" style="margin-top:16px">
+            <input type="checkbox" name="include_destructive" value="1"{{if .Data.IncludeDestructive}} checked{{end}}>
+            Sertakan perubahan destruktif (DROP)
+        </label>
+        <p class="muted">Centang jika ingin perubahan destruktif.</p>
+        <p><button type="submit">Bandingkan</button></p>
+    </form>
+</div>
+
+{{with .Data.CurrentDDL}}
+<div class="card">
+    <details>
+        <summary style="cursor:pointer;font-weight:600">Lihat kondisi DDL saat ini</summary>
+        <pre class="mono" style="margin:16px 0 0;padding:16px;overflow:auto;white-space:pre-wrap;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.04)">{{.}}</pre>
+    </details>
+</div>
+{{end}}
+{{end}}
+{{end}}

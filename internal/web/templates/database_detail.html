@@ -6,6 +6,7 @@
         <span class="badge">{{.Data.Level.Label}}</span>
         <span class="spacer"></span>
         <a class="btn secondary" href="{{.Data.MigrationHref}}">Migration</a>
+        {{if .Data.CanEdit}}<a class="btn secondary" href="{{.Data.SchemaDiffHref}}">Schema diff</a>{{end}}
         <a class="btn secondary" href="/databases">Kembali</a>
     </div>
     <p class="muted">{{$c.DBName}}</p>

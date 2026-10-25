@@ -161,7 +161,12 @@ func (a *App) databaseView(w http.ResponseWriter, r *http.Request) {
 		}
 		schemas = append(schemas, sr)
 	}
-	a.Render.Render(w, http.StatusOK, "database_detail", a.View(r, c.Name, map[string]any{"Conn": c, "Level": level, "Schemas": schemas, "MigrationHref": dbPath(c.ID) + "/migrations"}))
+	a.Render.Render(w, http.StatusOK, "database_detail", a.View(r, c.Name, map[string]any{
+		"Conn": c, "Level": level, "Schemas": schemas,
+		"MigrationHref":  dbPath(c.ID) + "/migrations",
+		"CanEdit":        authz.Allows(level, authz.EditMigration),
+		"SchemaDiffHref": dbPath(c.ID) + "/schema-diff",
+	}))
 }
 
 func orderNote(o explorer.Ordering) string {
