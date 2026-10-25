@@ -28,4 +28,72 @@
         </p>
     </form>
 </div>
+<div class="card">
+    <h2>Analisis execution plan</h2>
+    <p class="muted">EXPLAIN menampilkan rencana eksekusi, sedangkan EXPLAIN ANALYZE juga mengukur waktu dan jumlah baris aktual. Semua perubahan di-rollback.</p>
+    <form method="post" action="{{.Data.Back}}/{{$m.ID}}/explain">
+        <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+        <p>
+            <button type="submit" name="mode" value="plan" class="secondary">EXPLAIN</button>
+            <button type="submit" name="mode" value="analyze" class="secondary">EXPLAIN ANALYZE</button>
+        </p>
+    </form>
+    {{with .Data.Explain}}
+        {{$analyze := .Analyze}}
+        <h2>Hasil {{if $analyze}}EXPLAIN ANALYZE{{else}}EXPLAIN{{end}}</h2>
+        {{range .Statements}}
+            <div style="margin-top:20px">
+                <p><strong>Statement {{.Number}}</strong>{{if .NoPlan}} <span class="muted">(tanpa execution plan)</span>{{end}}</p>
+                <pre class="mono" style="margin:0 0 12px;padding:12px;overflow:auto;white-space:pre-wrap;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.04)">{{.SQL}}</pre>
+                {{if .Error}}
+                    <div class="alert error">Statement gagal: {{.Error}}</div>
+                {{else if .NoPlan}}
+                {{else}}
+                    <div class="scroll">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Node</th>
+                                    <th>Tabel</th>
+                                    <th>Index</th>
+                                    <th>Join</th>
+                                    <th>Estimasi cost</th>
+                                    <th>Estimasi baris</th>
+                                    {{if $analyze}}
+                                        <th>Baris aktual</th>
+                                        <th>Waktu aktual (ms)</th>
+                                        <th>Loops</th>
+                                    {{end}}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {{range .Nodes}}
+                                    <tr>
+                                        <td style="white-space:nowrap"><span class="mono" style="white-space:pre;color:var(--muted)">{{.Prefix}}</span>{{.Node}}</td>
+                                        <td>{{.Relation}}</td>
+                                        <td>{{.Index}}</td>
+                                        <td>{{.Join}}</td>
+                                        <td class="mono">{{printf "%.2f..%.2f" .StartupCost .TotalCost}}</td>
+                                        <td>{{printf "%.0f" .PlanRows}}</td>
+                                        {{if $analyze}}
+                                            <td>{{if .HasActual}}{{printf "%.0f" .ActualRows}}{{end}}</td>
+                                            <td>{{if .HasActual}}{{printf "%.3f" .ActualTime}}{{end}}</td>
+                                            <td>{{if .HasActual}}{{printf "%.0f" .Loops}}{{end}}</td>
+                                        {{end}}
+                                    </tr>
+                                {{end}}
+                            </tbody>
+                        </table>
+                    </div>
+                    {{if .HasTiming}}
+                        <p class="muted">Waktu perencanaan {{printf "%.3f" .PlanningTime}} ms{{if $analyze}}, waktu eksekusi {{printf "%.3f" .ExecutionTime}} ms{{end}}.</p>
+                    {{end}}
+                {{end}}
+            </div>
+        {{end}}
+        {{if .Stopped}}
+            <p class="muted">Analisis berhenti di statement yang gagal.</p>
+        {{end}}
+    {{end}}
+</div>
 {{end}}
