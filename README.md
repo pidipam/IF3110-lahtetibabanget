@@ -3,9 +3,10 @@ Tugas Besar IF3110 Pengembangan Aplikasi Web 2026
 
 # Database Management Platform
 
-Platform web untuk mengelola akses dan perubahan schema PostgreSQL bersama: akses diatur per
-grup, struktur dan data dapat dijelajahi, dan setiap perubahan dilakukan lewat migration yang
-tercatat. Tugas Besar IF3110 Pengembangan Aplikasi Web 2026, Milestone 1.
+Platform web untuk mengelola akses dan perubahan schema database bersama (PostgreSQL, dengan
+dukungan tambahan MySQL/MariaDB): akses diatur per grup, struktur dan data dapat dijelajahi, dan
+setiap perubahan dilakukan lewat migration yang tercatat. Tugas Besar IF3110 Pengembangan Aplikasi
+Web 2026, Milestone 1.
 
 ## Fitur
 
@@ -14,21 +15,26 @@ tercatat. Tugas Besar IF3110 Pengembangan Aplikasi Web 2026, Milestone 1.
   berkala dengan grace period, dan perlindungan CSRF.
 - **Otorisasi**: user → grup → akses database (*View Only* / *View + Edit*), dicek di backend pada
   setiap request. Platform Admin mengelola user, grup, koneksi, dan akses, tetapi bukan level akses database.
-- **Koneksi database**: CRUD koneksi PostgreSQL oleh admin, password dienkripsi (AES-256-GCM),
-  uji koneksi, dan kegagalan koneksi ditangani dengan halaman error yang aman.
+- **Koneksi database**: CRUD koneksi PostgreSQL, MySQL, dan MariaDB oleh admin. Engine dipilih saat
+  koneksi dibuat dan tidak dapat diubah. Password dienkripsi (AES-256-GCM), ada uji koneksi, dan
+  kegagalan koneksi ditangani dengan halaman error yang aman.
 - **Database viewer**: schema, tabel, kolom, constraint, index, dan data (read-only, paginasi).
 - **Migration**: editor SQL, review sebelum eksekusi, eksekusi dalam transaction (commit/rollback),
   versi linear per database, lock anti-paralel, statement timeout, dan riwayat.
 - **Analisis execution plan (bonus)**: EXPLAIN dan EXPLAIN ANALYZE per statement di halaman review,
-  ditampilkan sebagai pohon plan. Semua perubahan di-rollback.
+  ditampilkan sebagai pohon plan. Semua perubahan di-rollback. Khusus PostgreSQL.
 - **Schema diff (bonus)**: membandingkan schema database target dengan DDL kondisi yang diinginkan,
   menampilkan perbedaan struktur, lalu menghasilkan kandidat SQL migration yang dapat diedit dan
   disimpan sebagai draft migration biasa. DDL hanya dijalankan sementara di schema terpisah yang
   selalu di-rollback, sehingga database target tidak berubah.
+- **Dukungan DBMS tambahan (bonus)**: koneksi, access control, database viewer, dan migration juga
+  berjalan pada MySQL dan MariaDB. Perbedaan perilaku (terutama DDL yang tidak transactional)
+  dijelaskan di bagian "Keterbatasan yang diketahui".
 
 ## Teknologi
 
-Go (backend), PostgreSQL 16, `html/template` (bukan SPA), pgx, Docker Compose.
+Go (backend), PostgreSQL 16 (platform DB dan target), MariaDB 11 (target tambahan), `html/template`
+(bukan SPA), pgx, go-sql-driver/mysql, Docker Compose.
 
 ## Prasyarat
 
@@ -38,7 +44,7 @@ Di beberapa mesin Docker membutuhkan `sudo`.
 ## Menjalankan
 
 ```bash
-make up                                    # platform-db :5434, test-db :5433, target-db (sampel) :5435
+make up                                    # platform-db :5434, test-db :5433, target-db (sampel PG) :5435, target-mariadb (sampel) :3307
 ADMIN_PASSWORD='ganti-password' make run   # run pertama membuat akun admin
 ```
 
@@ -74,9 +80,14 @@ untuk mencoba viewer dan migration (`internal/db/target-seed.sql`). `make reset-
 mengembalikannya ke kondisi awal. User `app` adalah superuser; pada penggunaan nyata, pakai user
 target dengan hak minimum.
 
+`target-mariadb` (`127.0.0.1:3307`, database `sample`, user/password `app`/`app`) berisi data contoh
+MariaDB (`internal/db/target-seed-mysql.sql`), termasuk tabel dengan foreign key, check constraint,
+view, dan tabel tanpa primary key. Saat menambah koneksi, pilih engine `mariadb`.
+`make reset-mariadb` mengembalikannya ke kondisi awal.
+
 ## Cara pakai singkat
 
-1. **Admin**: Koneksi -> tambah koneksi -> Grup -> buat grup dan anggota -> atur akses database grup.
+1. **Admin**: Koneksi -> tambah koneksi (pilih engine) -> Grup -> buat grup dan anggota -> atur akses database grup.
 2. **User**: Database -> pilih database -> lihat struktur dan data -> Migration -> buat draft, tinjau, jalankan.
 3. **Schema diff (View + Edit)**: Database -> Schema diff -> pilih schema -> ubah DDL kondisi yang
    diinginkan -> Bandingkan -> periksa perbedaan dan SQL -> edit bila perlu -> simpan sebagai draft
@@ -118,7 +129,7 @@ hanya untuk View + Edit).
 | Pemberian versi | Saat eksekusi dimulai, di bawah lock: `MAX(version)+1` per database. Draft belum punya versi, sehingga versi linear tanpa celah. |
 | Migration gagal | Tetap memakai nomor versinya dan tampil di riwayat sebagai gagal. Untuk mencoba ulang, buat draft baru. |
 | Yang boleh diedit | Hanya draft. Migration yang sudah dijalankan tidak berubah. |
-| Eksekusi | Satu transaction di database target: commit bila seluruh SQL berhasil, rollback bila ada yang gagal. |
+| Eksekusi | Satu transaction di database target: commit bila seluruh SQL berhasil, rollback bila ada yang gagal. Pada MySQL/MariaDB, DDL tidak dapat di-rollback (lihat bagian MySQL/MariaDB). |
 | Statement timeout | 30 detik (`SET LOCAL statement_timeout`); menunggu lock tabel maksimal 10 detik (`lock_timeout`). Nilai ada di kode, tidak diatur lewat environment. |
 | Eksekusi paralel | Advisory lock per database di platform DB. Jika sudah dipegang, eksekusi kedua langsung ditolak (HTTP 409) dan migration tetap draft. |
 | Target tidak dapat dihubungi | Dicek sebelum nomor versi dipakai; migration tetap draft dan user melihat halaman 503 tanpa host/port. |
@@ -145,6 +156,20 @@ hanya untuk View + Edit).
 | Hak akses | View + Edit untuk membuka halaman, preview, dan menyimpan draft. View Only mendapat 403 dan tombolnya disembunyikan. |
 | Logging | Hanya id user, database, dan migration; DDL/SQL, password, dan session id tidak dicatat. |
 
+### MySQL/MariaDB (bonus dukungan DBMS tambahan)
+
+| Keputusan | Pilihan |
+|---|---|
+| Engine | `postgres`, `mysql`, atau `mariadb`, disimpan di kolom `engine` tabel `db_connections` (default `postgres`, sehingga koneksi lama tetap valid). Dipilih saat koneksi dibuat dan tidak dapat diubah, agar riwayat migration tidak menjadi tidak konsisten. |
+| Pemilihan jalur | `dbconn.Manager` menyediakan `Get` (pool pgx, PostgreSQL) dan `GetSQL` (`database/sql`, MySQL/MariaDB). Memanggil yang tidak sesuai dengan engine koneksi mengembalikan `ErrWrongEngine`. Access control, session, grant, dan riwayat migration tetap di platform DB PostgreSQL dan tidak berubah. |
+| Cakupan | Satu koneksi MySQL/MariaDB = satu database (schema = database). Introspeksi dibatasi ke database koneksi lewat `information_schema`. |
+| SSL mode | Pilihan form dipetakan: `disable` = tanpa TLS; `allow` dan `prefer` = TLS bila tersedia; `require` = TLS tanpa verifikasi sertifikat; `verify-ca` dan `verify-full` = TLS terverifikasi. |
+| Eksekusi migration | SQL dipecah per statement (menghormati string, identifier ber-backtick, dan komentar `--` dan `/* */`) dan dijalankan dalam satu transaction. Bila ada statement gagal, pesan error menyebut nomor statement dan memperingatkan kemungkinan perubahan parsial. |
+| Timeout | Seluruh migration dibatasi 30 detik lewat context, ditambah `lock_wait_timeout` 10 detik per sesi. Viewer dibatasi 5 detik. |
+| Viewer | Transaction read-only; nilai kolom diambil sebagai teks dan dipotong 500 karakter seperti di PostgreSQL. Tabel tanpa primary key tidak punya urutan baris yang stabil karena MySQL tidak memiliki padanan `ctid`. |
+| Klasifikasi error | Kode error MySQL (1044/1045 autentikasi, 1049 database tidak ada, 1040/1203 koneksi ditolak) dipetakan ke kategori yang sama dengan PostgreSQL, sehingga halaman error tidak membocorkan host, port, atau kredensial. |
+| EXPLAIN dan schema diff | Belum didukung: tombol disembunyikan di halaman review koneksi MySQL/MariaDB. |
+
 ### Koneksi dan viewer
 
 - Password koneksi dienkripsi AES-256-GCM dengan kunci dari `APP_ENCRYPTION_KEY`; server menolak start
@@ -167,6 +192,17 @@ hanya untuk View + Edit).
 - Schema diff hanya mengenali tabel biasa, kolom, constraint, index, view, enum, dan sequence. Partitioned
   table, materialized view, foreign table, trigger, function/procedure, extension, comment, owner,
   privilege/grant, serta RLS/policy tidak didiff sehingga perubahannya tidak terdeteksi dan tidak dibuatkan SQL.
+- **MySQL/MariaDB: DDL tidak dapat di-rollback.** `CREATE`, `ALTER`, `DROP`, dan `TRUNCATE` otomatis
+  di-commit oleh server, dan statement sesudahnya berjalan tanpa transaction. Migration yang gagal di
+  tengah dapat meninggalkan perubahan parsial: status migration tetap `failed` dan pesan error menyebut
+  statement yang gagal, tetapi statement DDL sebelumnya sudah berlaku. Rollback penuh hanya berlaku untuk
+  migration yang seluruhnya berisi DML. Halaman review menampilkan peringatan ini.
+- MySQL/MariaDB: pemecah statement belum menangani komentar `#`, backslash-escape di dalam string literal,
+  dan `DELIMITER` atau stored procedure; gunakan statement sederhana yang dipisah `;`.
+- MySQL/MariaDB: analisis execution plan (EXPLAIN) dan schema diff belum didukung.
+- MySQL/MariaDB: tabel tanpa primary key tampil tanpa urutan baris yang stabil, sehingga isi tiap halaman
+  bisa berubah antar permintaan. Introspeksi mencakup tabel dan view pada database koneksi saja.
+
 ## Test
 
 ```bash
@@ -176,9 +212,11 @@ make test               # keduanya
 make test-integration PKG=./internal/migration   # satu paket
 ```
 
-Jalankan lewat Makefile, bukan `go test` langsung, karena variabel `TEST_DATABASE_URL` dan
-`TARGET_DB_URL` diisi di sana. Test migration membuat tabel `zz_mig_*` di database sampel dan
-menghapusnya lagi; bila ada sisa, jalankan `make reset-target`.
+Jalankan lewat Makefile, bukan `go test` langsung, karena variabel `TEST_DATABASE_URL`,
+`TARGET_DB_URL`, dan `TARGET_MARIADB_ADDR` diisi di sana. Test migration membuat tabel `zz_mig_*` di
+database sampel dan menghapusnya lagi; bila ada sisa, jalankan `make reset-target`. Test MariaDB memakai
+`TARGET_MARIADB_ADDR` (default Makefile `127.0.0.1:3307`) dan membuat tabel `zz_mig_my*`; bila ada sisa,
+jalankan `make reset-mariadb`.
 
 ## Struktur
 
@@ -188,14 +226,14 @@ internal/app          handler HTTP dan routing
 internal/auth         login, session, CSRF
 internal/authz        kebijakan akses (satu-satunya tempat keputusan izin)
 internal/users        user dan grup
-internal/dbconn       koneksi target, enkripsi password, grant
-internal/explorer     introspeksi schema dan viewer data
-internal/migration    migration: repository, service, executor
+internal/dbconn       koneksi target (PostgreSQL dan MySQL/MariaDB), enkripsi password, grant
+internal/explorer     introspeksi schema dan viewer data (PostgreSQL dan MySQL/MariaDB)
+internal/migration    migration: repository, service, executor, sesi eksekusi per engine
 internal/schemadiff   diff schema dan generator SQL migration
 internal/platformdb   koneksi dan migrasi schema platform
 internal/web          renderer dan template
 internal/testutil     helper test
-internal/db           seed database sampel
+internal/db           seed database sampel (PostgreSQL dan MariaDB)
 ```
 
 ## Pemecahan masalah
@@ -205,7 +243,9 @@ internal/db           seed database sampel
 | `belum ada admin, isi ADMIN_PASSWORD` | Run pertama butuh `ADMIN_PASSWORD` (min. 8 karakter). |
 | `APP_ENCRYPTION_KEY tidak valid` | Buat kunci dengan `openssl rand -base64 32`. |
 | `address already in use` atau `password authentication failed` pada port 5433, 5434, atau 5435 | Port dipakai PostgreSQL lain di mesin Anda. Hentikan proses itu, atau pakai database lain untuk test: `make test TEST_DATABASE_URL=postgres://...`. |
+| `address already in use` pada port 3307 | Port dipakai MySQL/MariaDB lain. Hentikan proses itu, atau ubah port di `docker-compose.yml` dan `TARGET_MARIADB_ADDR`. |
 | Test viewer gagal setelah test migration | `make reset-target` |
+| Test MariaDB gagal setelah test migration MySQL | `make reset-mariadb` |
 | Docker `permission denied` | Jalankan dengan `sudo`. |
 
 ## Tim
@@ -214,4 +254,4 @@ internal/db           seed database sampel
 |---|---|---|
 | Helena Kristela Sarhawa | 13524109 | Access Control, Autentikasi, Sesi, Otorisasi, Manajemen User & Grup, Bonus EXPLAIN / EXPLAIN ANALYZE |
 | Vara Azzara Ramli Pulukadang | 13524091 | Database Management, Encrypted Connection, Metadata Explorer, Data Viewer |
-| Keisha Rizka Syofyani | 13524073 | Migration Engine, Transaksi & Locking, History, Dokumentasi, README |
+| Keisha Rizka Syofyani | 13524073 | Migration Engine, Transaksi & Locking, History, Dokumentasi, README, Bonus Dukungan DBMS MySQL/MariaDB |
