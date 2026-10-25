@@ -1,0 +1,74 @@
+{{define "content"}}
+<div class="card">
+    <div class="row">
+        <h1>Hasil schema diff</h1>
+        <span class="spacer"></span>
+        <a class="btn secondary" href="{{.Data.Back}}">Ubah DDL</a>
+    </div>
+    <p class="muted">
+        Database target <strong>{{.Data.DBName}}</strong>{{with .Data.Schema}} pada schema <span class="mono">{{.}}</span>{{end}}
+        {{if .Data.Statements}}menghasilkan {{.Data.Statements}} statement aktif{{if .Data.Skipped}} dan {{.Data.Skipped}} statement destruktif dilewati{{end}}{{else}}tidak memiliki statement aktif{{end}}.
+    </p>
+</div>
+
+{{if .Data.Warnings}}
+<div class="card">
+    <h2>Peringatan</h2>
+    <ul>
+        {{range .Data.Warnings}}<li>{{.}}</li>{{end}}
+    </ul>
+</div>
+{{end}}
+
+<div class="card">
+    <h2>Perbedaan struktur</h2>
+    {{with .Data.Changes}}
+        <div class="scroll">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Operasi</th>
+                        <th>Jenis</th>
+                        <th>Objek</th>
+                        <th>Detail</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .}}
+                        <tr>
+                            <td>{{.Op.Label}}{{if .Destructive}} <span class="badge off">destruktif</span>{{end}}</td>
+                            <td class="muted">{{.Kind}}</td>
+                            <td class="mono">{{.Object}}</td>
+                            <td>{{.Detail}}</td>
+                        </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+    {{else}}
+        <p class="muted">Tidak ada perbedaan struktur.</p>
+    {{end}}
+</div>
+
+<div class="card">
+    <h2>Kandidat SQL migration</h2>
+    <p class="muted">SQL ini dapat diubah dan disimpan sebagai draft migration.</p>
+    <form method="post" action="{{.Data.CreateAction}}">
+        <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+        <input type="hidden" name="schema" value="{{.Data.Schema}}">
+        <label for="title">Judul draft</label>
+        <input type="text" id="title" name="title" value="{{.Data.Title}}" maxlength="100" required>
+        <label for="sql">SQL</label>
+        <textarea id="sql" name="sql" required spellcheck="false"
+            style="max-width:none;min-height:360px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px">{{.Data.SQL}}</textarea>
+        <p>
+            {{if .Data.CanCreate}}
+                <button type="submit">Simpan sebagai draft migration</button>
+            {{else}}
+                <button type="submit" disabled style="opacity:.5;cursor:not-allowed">Simpan sebagai draft migration</button>
+            {{end}}
+            <a class="btn secondary" href="{{.Data.Back}}">Kembali</a>
+        </p>
+    </form>
+</div>
+{{end}}

@@ -36,5 +36,6 @@ func (a *App) routes() {
 	a.mux.Handle("GET /databases/{id}", login(a.databaseView))
 	a.mux.Handle("GET /databases/{id}/tables/{schema}/{table}", login(a.databaseTable))
 	a.migrationRoutes()
+	a.schemaDiffRoutes()
 	a.mux.HandleFunc("/", a.notFound)
 }

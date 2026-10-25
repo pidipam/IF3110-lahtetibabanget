@@ -17,7 +17,7 @@
         <input type="text" id="username" name="username" value="{{$f.Username}}" autocomplete="off" required>
         <label for="password">Password</label>
         <input type="password" id="password" name="password" autocomplete="new-password"{{if not $c}} required{{end}}>
-        {{if $c}}<p class="muted">Kosongkan untuk mempertahankan password yang tersimpan. Password tidak pernah ditampilkan kembali.</p>{{end}}
+        {{if $c}}<p class="muted">Kosongkan untuk mempertahankan password yang tersimpan.</p>{{end}}
         <label for="sslmode">SSL mode</label>
         <select id="sslmode" name="sslmode">
             {{range .Data.SSLModes}}

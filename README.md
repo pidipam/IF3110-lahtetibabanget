@@ -21,6 +21,10 @@ tercatat. Tugas Besar IF3110 Pengembangan Aplikasi Web 2026, Milestone 1.
   versi linear per database, lock anti-paralel, statement timeout, dan riwayat.
 - **Analisis execution plan (bonus)**: EXPLAIN dan EXPLAIN ANALYZE per statement di halaman review,
   ditampilkan sebagai pohon plan. Semua perubahan di-rollback.
+- **Schema diff (bonus)**: membandingkan schema database target dengan DDL kondisi yang diinginkan,
+  menampilkan perbedaan struktur, lalu menghasilkan kandidat SQL migration yang dapat diedit dan
+  disimpan sebagai draft migration biasa. DDL hanya dijalankan sementara di schema terpisah yang
+  selalu di-rollback, sehingga database target tidak berubah.
 
 ## Teknologi
 
@@ -74,8 +78,13 @@ target dengan hak minimum.
 
 1. **Admin**: Koneksi -> tambah koneksi -> Grup -> buat grup dan anggota -> atur akses database grup.
 2. **User**: Database -> pilih database -> lihat struktur dan data -> Migration -> buat draft, tinjau, jalankan.
+3. **Schema diff (View + Edit)**: Database -> Schema diff -> pilih schema -> ubah DDL kondisi yang
+   diinginkan -> Bandingkan -> periksa perbedaan dan SQL -> edit bila perlu -> simpan sebagai draft
+   migration. Draft tersebut kemudian ditinjau dan dijalankan lewat halaman Migration.
 
 Halaman migration: `/databases/{id}/migrations` (tombol "Migration" di halaman database).
+Halaman schema diff: `/databases/{id}/schema-diff` (tombol "Schema diff" di halaman database,
+hanya untuk View + Edit).
 
 ## Keputusan desain
 
@@ -121,6 +130,21 @@ Halaman migration: `/databases/{id}/migrations` (tombol "Migration" di halaman d
 | Logging | Hanya id (user, database, migration) dan status. SQL, password, dan session id tidak dicatat. |
 | EXPLAIN / EXPLAIN ANALYZE | Hanya untuk draft dan butuh View + Edit. Dijalankan per statement dalam satu transaction yang selalu di-rollback, dengan timeout yang sama. Statement DDL dijalankan sementara agar statement berikutnya bisa dianalisis. |
 
+### Schema diff
+
+| Keputusan | Pilihan |
+|---|---|
+| Kondisi pembanding | DDL kondisi yang diinginkan di textarea, awalnya diisi dari `schemadiff.Dump` schema saat ini. Tidak membuka koneksi kedua; satu schema dibandingkan per request. |
+| Eksekusi DDL | Dijalankan dalam transaction pada schema sementara `zz_schemadiff_<hex>` dengan `search_path` schema target, `public`, lalu `pg_catalog`. Transaction selalu di-rollback dan schema sementara ikut hilang, sehingga database target tidak berubah. |
+| Batas waktu | 25 detik per preview, dengan `statement_timeout` 20 detik dan `lock_timeout` 5 detik pada koneksi target. |
+| Validasi | Aturan yang sama dengan migration: maksimal 100 KB; `BEGIN`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, dan `START TRANSACTION` ditolak. Pesan error DDL ditampilkan tanpa host, port, atau kredensial. |
+| Cakupan | Tabel biasa, kolom, constraint, index, view, enum, dan sequence. Nama objek di-qualify dengan schema target. SQL hasil diawali `SET LOCAL search_path` agar foreign key atau view yang merujuk objek di `public` tetap dapat diselesaikan. |
+| Perubahan destruktif | `DROP TABLE`, `DROP COLUMN`, `DROP TYPE`, dan `DROP SEQUENCE` ditulis sebagai komentar secara default. Checkbox "Sertakan perubahan destruktif" mengaktifkannya dan menambahkan peringatan. |
+| Hasil | Daftar perubahan per objek, peringatan (mis. perubahan tipe, `NOT NULL` tanpa default, enum yang tidak dapat diubah langsung), dan SQL yang masih dapat diedit. |
+| Menyimpan | SQL dikirim ke fitur migration yang sudah ada, sehingga menjadi draft biasa: judul dan SQL dapat diubah, ditinjau dengan checksum, lalu dijalankan dalam transaction. |
+| Hak akses | View + Edit untuk membuka halaman, preview, dan menyimpan draft. View Only mendapat 403 dan tombolnya disembunyikan. |
+| Logging | Hanya id user, database, dan migration; DDL/SQL, password, dan session id tidak dicatat. |
+
 ### Koneksi dan viewer
 
 - Password koneksi dienkripsi AES-256-GCM dengan kunci dari `APP_ENCRYPTION_KEY`; server menolak start
@@ -140,8 +164,9 @@ Halaman migration: `/databases/{id}/migrations` (tombol "Migration" di halaman d
 - Perintah yang tidak boleh berjalan dalam transaction (mis. `CREATE INDEX CONCURRENTLY`, `VACUUM`) akan gagal dan di-rollback.
 - Rollback hanya membatalkan perubahan transaksional; nilai sequence yang sudah terpakai tidak dikembalikan.
   Migration yang sudah di-commit tidak dapat dibatalkan; buat migration baru untuk membalikkannya.
-- `count(*)` pada tabel yang sangat besar dapat melewati timeout viewer 5 detik dan menampilkan halaman 500.
-
+- Schema diff hanya mengenali tabel biasa, kolom, constraint, index, view, enum, dan sequence. Partitioned
+  table, materialized view, foreign table, trigger, function/procedure, extension, comment, owner,
+  privilege/grant, serta RLS/policy tidak didiff sehingga perubahannya tidak terdeteksi dan tidak dibuatkan SQL.
 ## Test
 
 ```bash
@@ -166,6 +191,7 @@ internal/users        user dan grup
 internal/dbconn       koneksi target, enkripsi password, grant
 internal/explorer     introspeksi schema dan viewer data
 internal/migration    migration: repository, service, executor
+internal/schemadiff   diff schema dan generator SQL migration
 internal/platformdb   koneksi dan migrasi schema platform
 internal/web          renderer dan template
 internal/testutil     helper test
