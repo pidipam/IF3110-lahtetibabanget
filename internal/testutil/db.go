@@ -25,7 +25,7 @@ func NewTestDB(t testing.TB) *pgxpool.Pool {
 	t.Helper()
 	dsn := RequireEnv(t, EnvTestDB)
 	ctx := context.Background()
-	auth.BcryptCost = bcrypt.MinCost // hash cepat; hanya untuk test
+	auth.BcryptCost = bcrypt.MinCost 
 
 	db, err := platformdb.Connect(ctx, dsn)
 	if err != nil {
