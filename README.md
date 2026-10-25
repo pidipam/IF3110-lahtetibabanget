@@ -19,6 +19,8 @@ tercatat. Tugas Besar IF3110 Pengembangan Aplikasi Web 2026, Milestone 1.
 - **Database viewer**: schema, tabel, kolom, constraint, index, dan data (read-only, paginasi).
 - **Migration**: editor SQL, review sebelum eksekusi, eksekusi dalam transaction (commit/rollback),
   versi linear per database, lock anti-paralel, statement timeout, dan riwayat.
+- **Analisis execution plan (bonus)**: EXPLAIN dan EXPLAIN ANALYZE per statement di halaman review,
+  ditampilkan sebagai pohon plan. Semua perubahan di-rollback.
 
 ## Teknologi
 
@@ -117,6 +119,7 @@ Halaman migration: `/databases/{id}/migrations` (tombol "Migration" di halaman d
 | Hak akses | Lihat riwayat dan detail: View Only. Buat, edit, tinjau, jalankan: View + Edit. Dicek di backend pada setiap request. |
 | Hapus koneksi | Diblokir bila punya riwayat migration (foreign key `RESTRICT`, HTTP 409). |
 | Logging | Hanya id (user, database, migration) dan status. SQL, password, dan session id tidak dicatat. |
+| EXPLAIN / EXPLAIN ANALYZE | Hanya untuk draft dan butuh View + Edit. Dijalankan per statement dalam satu transaction yang selalu di-rollback, dengan timeout yang sama. Statement DDL dijalankan sementara agar statement berikutnya bisa dianalisis. |
 
 ### Koneksi dan viewer
 
@@ -183,6 +186,6 @@ internal/db           seed database sampel
 
 | Anggota | NIM | Pembagian Tugas |
 |---|---|---|
-| Helena Kristela Sarhawa | 13524109 | Access Control, Autentikasi, Sesi, Otorisasi, Manajemen User & Grup |
+| Helena Kristela Sarhawa | 13524109 | Access Control, Autentikasi, Sesi, Otorisasi, Manajemen User & Grup, Bonus EXPLAIN / EXPLAIN ANALYZE |
 | Vara Azzara Ramli Pulukadang | 13524091 | Database Management, Encrypted Connection, Metadata Explorer, Data Viewer |
 | Keisha Rizka Syofyani | 13524073 | Migration Engine, Transaksi & Locking, History, Dokumentasi, README |
