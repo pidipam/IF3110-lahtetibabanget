@@ -42,6 +42,9 @@ func TestMigrationExplainOnReviewPage(t *testing.T) {
 
 	review := ed.do("GET", path+"/review", nil)
 	expectStatus(t, review, http.StatusOK)
+	if strings.Contains(review.Body.String(), "belum didukung") {
+		t.Fatal("halaman review PostgreSQL tidak boleh menampilkan pesan 'belum didukung'")
+	}
 	if !strings.Contains(review.Body.String(), "EXPLAIN ANALYZE") {
 		t.Fatal("halaman review tidak menampilkan tombol EXPLAIN")
 	}

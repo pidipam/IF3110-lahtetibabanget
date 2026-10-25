@@ -7,6 +7,17 @@
         <input type="hidden" name="csrf_token" value="{{.CSRF}}">
         <label for="name">Nama koneksi</label>
         <input type="text" id="name" name="name" value="{{$f.Name}}" required>
+        <label for="engine">Engine</label>
+        {{if $c}}
+            <input type="text" id="engine" value="{{$f.Engine}}" disabled>
+            <p class="muted">Engine tidak dapat diubah setelah koneksi dibuat.</p>
+        {{else}}
+            <select id="engine" name="engine" onchange="var p=document.getElementById('port');if(this.value==='postgres'){if(p.value==='3306')p.value='5432'}else if(p.value==='5432'){p.value='3306'}">
+                {{range .Data.Engines}}
+                    <option value="{{.}}"{{if eq . $f.Engine}} selected{{end}}>{{.}}</option>
+                {{end}}
+            </select>
+        {{end}}
         <label for="host">Host</label>
         <input type="text" id="host" name="host" value="{{$f.Host}}" required>
         <label for="port">Port</label>
@@ -24,6 +35,7 @@
                 <option value="{{.}}"{{if eq . $f.SSLMode}} selected{{end}}>{{.}}</option>
             {{end}}
         </select>
+        <p class="muted">Untuk MySQL/MariaDB: disable = tanpa TLS, allow/prefer = TLS bila tersedia, require = TLS tanpa verifikasi, verify-ca/verify-full = TLS terverifikasi.</p>
         <p>
             <button type="submit">{{if $c}}Simpan perubahan{{else}}Simpan{{end}}</button>
             <button type="submit" class="secondary" formaction="{{if $c}}/admin/connections/{{$c.ID}}/test{{else}}/admin/connections/test{{end}}">Test connection</button>

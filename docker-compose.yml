@@ -32,5 +32,22 @@ services:
       interval: 2s
       timeout: 3s
       retries: 30
+    
+  target-mariadb:
+    image: mariadb:11
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_DATABASE: sample
+      MARIADB_USER: app
+      MARIADB_PASSWORD: app
+    ports:
+      - "3307:3306"
+    volumes:
+      - ./internal/db/target-seed-mysql.sql:/docker-entrypoint-initdb.d/01-seed.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
 volumes:
   platform-data:

@@ -7,6 +7,7 @@ import (
 	"net"
 	"syscall"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
@@ -39,6 +40,21 @@ func classify(err error) (Kind, bool) {
 	var ne net.Error
 	if errors.As(err, &ne) && ne.Timeout() {
 		return KindTimeout, true
+	}
+	var me *mysql.MySQLError
+	if errors.As(err, &me) {
+		switch me.Number {
+		case 1044, 1045:
+			return KindAuth, true
+		case 1049:
+			return KindNoDatabase, true
+		case 1040, 1203:
+			return KindRefused, true
+		}
+		return KindOther, false
+	}
+	if errors.Is(err, mysql.ErrInvalidConn) {
+		return KindOther, true
 	}
 	var ce *pgconn.ConnectError
 	if errors.As(err, &ce) {

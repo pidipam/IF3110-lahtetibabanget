@@ -10,9 +10,9 @@ import (
 func TestSplitStatements(t *testing.T) {
 	cases := []struct {
 		name string
-		in string
+		in   string
 		want []string
-	}{{"satu tanpa titik koma", "SELECT 1", []string{"SELECT 1"}}, {"dua statement", "SELECT 1; SELECT 2;", []string{"SELECT 1", "SELECT 2"}}, {"titik koma di string", "INSERT INTO t VALUES ('a;b'); SELECT 2", []string{"INSERT INTO t VALUES ('a;b')", "SELECT 2"}}, {"titik koma di identifier", `SELECT 1 AS "x;y"; SELECT 2`, []string{`SELECT 1 AS "x;y"`, "SELECT 2"}}, {"komentar", "-- catatan; bukan pemisah\nSELECT 1; /* ; */ SELECT 2", []string{"-- catatan; bukan pemisah\nSELECT 1", "/* ; */ SELECT 2"}}, {"dollar quote", "CREATE FUNCTION f() RETURNS int AS $$ SELECT 1; $$ LANGUAGE sql; SELECT 2", []string{"CREATE FUNCTION f() RETURNS int AS $$ SELECT 1; $$ LANGUAGE sql", "SELECT 2"}}, {"hanya komentar dan titik koma", "; -- kosong\n;", nil}}
+	}{{"satu tanpa titik koma", "SELECT 1", []string{"SELECT 1"}}, {"dua statement", "SELECT 1; SELECT 2;", []string{"SELECT 1", "SELECT 2"}}, {"titik koma di string", "INSERT INTO t VALUES ('a;b'); SELECT 2", []string{"INSERT INTO t VALUES ('a;b')", "SELECT 2"}}, {"titik koma di identifier", `SELECT 1 AS "x;y"; SELECT 2`, []string{`SELECT 1 AS "x;y"`, "SELECT 2"}}, {"komentar", "-- catatan; bukan pemisah\nSELECT 1; /* ; */ SELECT 2", []string{"-- catatan; bukan pemisah\nSELECT 1", "/* ; */ SELECT 2"}}, {"dollar quote", "CREATE FUNCTION f() RETURNS int AS $$ SELECT 1; $$ LANGUAGE sql; SELECT 2", []string{"CREATE FUNCTION f() RETURNS int AS $$ SELECT 1; $$ LANGUAGE sql", "SELECT 2"}}, {"hanya komentar dan titik koma", "; -- kosong\n;", nil}, {"titik koma di backtick", "SELECT 1 AS `x;y`; SELECT 2", []string{"SELECT 1 AS `x;y`", "SELECT 2"}}}
 	for _, c := range cases {
 		if got := SplitStatements(c.in); !reflect.DeepEqual(got, c.want) {
 			t.Errorf("%s: got %q, want %q", c.name, got, c.want)

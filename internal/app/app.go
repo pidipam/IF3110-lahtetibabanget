@@ -64,8 +64,9 @@ func New(opt Options) (*App, error) {
 	a.Grants = &dbconn.GrantService{Repo: a.GrantStore, Sessions: a.Sessions}
 	repo := migration.NewRepository(opt.DB)
 	a.migrationExec = migration.NewExecutor(opt.DB, repo, managerTargets{
-		db:  opt.DB,
-		get: func(ctx context.Context, id int64) (*pgxpool.Pool, error) { return a.Manager.Get(ctx, id) },
+		db:     opt.DB,
+		get:    func(ctx context.Context, id int64) (*pgxpool.Pool, error) { return a.Manager.Get(ctx, id) },
+		getSQL: a.Manager.GetSQL,
 	}, 0)
 	a.Migrations = migration.NewService(repo, a.migrationExec, a.Authz)
 	a.routes()

@@ -8,7 +8,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/pidipam/IF3110-lahtetibabanget/internal/dbconn"
 )
 
 var ErrBusy = errors.New("ada migration lain yang sedang berjalan pada database ini, coba lagi sebentar")
@@ -62,20 +61,11 @@ func (e *Executor) Execute(ctx context.Context, dbID, id, userID int64) (*Migrat
 	defer unlock(lock, key)
 
 	// 2. Pastikan target bisa dihubungi SEBELUM nomor versi dipakai.
-	pool, err := e.targets.Pool(ctx, dbID)
+	sess, err := e.openSession(ctx, dbID)
 	if err != nil {
 		return nil, err
 	}
-	tconn, err := pool.Acquire(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrTargetUnavailable, dbconn.Wrap(err))
-	}
-	defer tconn.Release()
-	tx, err := tconn.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrTargetUnavailable, dbconn.Wrap(err))
-	}
-	defer tx.Rollback(context.WithoutCancel(ctx)) // no-op bila sudah commit
+	defer sess.Close()
 
 	// 3. Tetapkan versi di bawah lock dan tandai running. SQL yang dijalankan
 	//    diambil dari baris yang sama (RETURNING) agar sama persis dengan yang tercatat.
@@ -96,10 +86,9 @@ func (e *Executor) Execute(ctx context.Context, dbID, id, userID int64) (*Migrat
 	}
 
 	// 4. Eksekusi di transaction target: commit bila sukses, rollback bila gagal.
-	execErr := e.run(ctx, tx, sqlText)
+	execErr := sess.Run(ctx, sqlText, e.Timeout)
 	status, msg := StatusSuccess, ""
 	if execErr != nil {
-		tx.Rollback(context.WithoutCancel(ctx))
 		status, msg = StatusFailed, truncate(execErr.Error(), 2000)
 	}
 
@@ -111,22 +100,6 @@ func (e *Executor) Execute(ctx context.Context, dbID, id, userID int64) (*Migrat
 		return nil, fmt.Errorf("hasil migration gagal dicatat: %w", err)
 	}
 	return e.repo.Get(context.WithoutCancel(ctx), dbID, id)
-}
-
-func (e *Executor) run(ctx context.Context, tx pgx.Tx, sql string) error {
-	ctx, cancel := context.WithTimeout(ctx, e.Timeout+5*time.Second)
-	defer cancel()
-	if _, err := tx.Exec(ctx, fmt.Sprintf("SET LOCAL statement_timeout = %d", e.Timeout.Milliseconds())); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(ctx, "SET LOCAL lock_timeout = '10s'"); err != nil {
-		return err
-	}
-	// Simple protocol agar satu migration boleh berisi banyak statement.
-	if _, err := tx.Exec(ctx, sql, pgx.QueryExecModeSimpleProtocol); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
 }
 
 // RecoverStuck dipanggil saat startup: migration yang tertinggal berstatus

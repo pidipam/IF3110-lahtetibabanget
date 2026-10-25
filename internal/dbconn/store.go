@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const connColumns = "id, name, host, port, db_name, username, sslmode, created_at, updated_at"
+const connColumns = "id, name, host, port, db_name, username, sslmode, engine, created_at, updated_at"
 
 type Store struct {
 	db     *pgxpool.Pool
@@ -23,7 +23,7 @@ func NewStore(db *pgxpool.Pool, c *Cipher) *Store {
 
 func scanConnection(row pgx.Row) (*Connection, error) {
 	c := &Connection{}
-	err := row.Scan(&c.ID, &c.Name, &c.Host, &c.Port, &c.DBName, &c.Username, &c.SSLMode, &c.CreatedAt, &c.UpdatedAt)
+	err := row.Scan(&c.ID, &c.Name, &c.Host, &c.Port, &c.DBName, &c.Username, &c.SSLMode, &c.Engine, &c.CreatedAt, &c.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -56,8 +56,8 @@ func (s *Store) Create(ctx context.Context, in Input) (*Connection, error) {
 		return nil, fmt.Errorf("enkripsi password: %w", err)
 	}
 	c, err := scanConnection(s.db.QueryRow(ctx,
-		"INSERT INTO db_connections (name, host, port, db_name, username, password_enc, sslmode) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING "+connColumns,
-		in.Name, in.Host, in.Port, in.DBName, in.Username, enc, in.SSLMode))
+		"INSERT INTO db_connections (name, host, port, db_name, username, password_enc, sslmode, engine) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING "+connColumns,
+		in.Name, in.Host, in.Port, in.DBName, in.Username, enc, in.SSLMode, in.Engine))
 	if err != nil {
 		return nil, mapStoreErr(err)
 	}
@@ -149,8 +149,8 @@ func (s *Store) ListByIDs(ctx context.Context, ids []int64) ([]*Connection, erro
 func (s *Store) Credentials(ctx context.Context, id int64) (Params, error) {
 	var p Params
 	var enc string
-	err := s.db.QueryRow(ctx, "SELECT host, port, db_name, username, password_enc, sslmode FROM db_connections WHERE id = $1", id).
-		Scan(&p.Host, &p.Port, &p.DBName, &p.Username, &enc, &p.SSLMode)
+	err := s.db.QueryRow(ctx, "SELECT host, port, db_name, username, password_enc, sslmode, engine FROM db_connections WHERE id = $1", id).
+		Scan(&p.Host, &p.Port, &p.DBName, &p.Username, &enc, &p.SSLMode, &p.Engine)
 	if err != nil {
 		return Params{}, mapStoreErr(err)
 	}
@@ -164,18 +164,18 @@ func (s *Store) Credentials(ctx context.Context, id int64) (Params, error) {
 
 func ParamsFromInput(in Input) Params {
 	in.Normalize()
-	return Params{Host: in.Host, Port: in.Port, DBName: in.DBName, Username: in.Username, Password: in.Password, SSLMode: in.SSLMode}
+	return Params{Host: in.Host, Port: in.Port, DBName: in.DBName, Username: in.Username, Password: in.Password, SSLMode: in.SSLMode, Engine: in.Engine}
 }
 
 func (s *Store) ParamsForEdit(ctx context.Context, id int64, in Input) (Params, error) {
 	p := ParamsFromInput(in)
-	if in.Password != "" {
-		return p, nil
-	}
 	old, err := s.Credentials(ctx, id)
 	if err != nil {
 		return Params{}, err
 	}
-	p.Password = old.Password
+	p.Engine = old.Engine
+	if in.Password == "" {
+		p.Password = old.Password
+	}
 	return p, nil
 }

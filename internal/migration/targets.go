@@ -2,6 +2,7 @@ package migration
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 
@@ -20,11 +21,15 @@ type Targets interface {
 }
 
 // StaticTargets melayani satu database target tetap. Dipakai untuk test dan
-// sebagai cadangan demo sampai dbconn.Manager milik B tersambung.
 type StaticTargets struct {
 	id   int64
 	name string
 	pool *pgxpool.Pool
+}
+
+type SQLTargets interface {
+	Engine(ctx context.Context, dbID int64) (string, error)
+	SQLDB(ctx context.Context, dbID int64) (*sql.DB, error)
 }
 
 func NewStaticTargets(ctx context.Context, id int64, name, url string) (*StaticTargets, error) {

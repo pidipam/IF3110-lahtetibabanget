@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/go-sql-driver/mysql"
 )
 
 var (
@@ -17,10 +19,27 @@ var (
 	ErrConnectionFailed = errors.New("koneksi ke database target gagal")
 )
 
+const (
+	EnginePostgres = "postgres"
+	EngineMySQL    = "mysql"
+	EngineMariaDB  = "mariadb"
+)
+
+func Engines() []string { return []string{EnginePostgres, EngineMySQL, EngineMariaDB} }
+
+func validEngine(e string) bool {
+	return e == EnginePostgres || e == EngineMySQL || e == EngineMariaDB
+}
+
+func IsMySQLFamily(e string) bool { return e == EngineMySQL || e == EngineMariaDB }
+
+var ErrWrongEngine = errors.New("engine koneksi tidak sesuai dengan operasi ini")
+
 // Aman dikirim ke template.
 type Connection struct {
 	ID        int64
 	Name      string
+	Engine    string
 	Host      string
 	Port      int
 	DBName    string
@@ -32,6 +51,7 @@ type Connection struct {
 
 type Input struct {
 	Name     string
+	Engine   string
 	Host     string
 	Port     int
 	DBName   string
@@ -42,6 +62,7 @@ type Input struct {
 
 // jangan dikirim ke template atau log
 type Params struct {
+	Engine   string
 	Host     string
 	Port     int
 	DBName   string
@@ -57,6 +78,10 @@ func (p Params) String() string {
 func (p Params) GoString() string { return p.String() }
 
 func (p Params) DSN() string {
+	if p.Engine == EngineMySQL || p.Engine == EngineMariaDB {
+		return p.MySQLDSN()
+	}
+
 	q := url.Values{}
 	mode := p.SSLMode
 	if mode == "" {
@@ -88,6 +113,10 @@ func (in *Input) Normalize() {
 	in.Host = strings.TrimSpace(in.Host)
 	in.DBName = strings.TrimSpace(in.DBName)
 	in.Username = strings.TrimSpace(in.Username)
+	in.Engine = strings.TrimSpace(in.Engine)
+	if in.Engine == "" {
+		in.Engine = EnginePostgres
+	}
 	in.SSLMode = strings.TrimSpace(in.SSLMode)
 	if in.SSLMode == "" {
 		in.SSLMode = "prefer"
@@ -107,6 +136,8 @@ func (in Input) Validate(requirePassword bool) error {
 		return bad("Nama database wajib diisi, maksimal 63 karakter.")
 	case in.Username == "" || len(in.Username) > 63:
 		return bad("Username wajib diisi, maksimal 63 karakter.")
+	case in.Engine != "" && !validEngine(in.Engine): // Izinkan kosong agar test lama lolos sebelum dinormalisasi
+		return bad("Engine database tidak valid.")
 	case requirePassword && in.Password == "":
 		return bad("Password wajib diisi.")
 	case len(in.Password) > 256:
@@ -171,3 +202,27 @@ func (e *ConnError) Error() string { return "koneksi database gagal: " + e.Kind.
 func (e *ConnError) Unwrap() error { return e.err }
 
 func (e *ConnError) Is(target error) bool { return target == ErrConnectionFailed }
+
+func (p Params) MySQLDSN() string {
+	cfg := mysql.NewConfig()
+	cfg.User = p.Username
+	cfg.Passwd = p.Password
+	cfg.Net = "tcp"
+	cfg.Addr = net.JoinHostPort(p.Host, strconv.Itoa(p.Port))
+	cfg.DBName = p.DBName
+	cfg.Timeout = 5 * time.Second
+	cfg.TLSConfig = mysqlTLS(p.SSLMode)
+	return cfg.FormatDSN()
+}
+
+func mysqlTLS(mode string) string {
+	switch mode {
+	case "disable":
+		return "false"
+	case "require":
+		return "skip-verify"
+	case "verify-ca", "verify-full":
+		return "true"
+	}
+	return "preferred" // allow, prefer, kosong
+}

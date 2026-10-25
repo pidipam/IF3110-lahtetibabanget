@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
@@ -108,6 +109,9 @@ func TestClassify(t *testing.T) {
 		{"dns", &net.DNSError{Err: "no such host", Name: "nope"}, KindHost, true},
 		{"reset", syscall.ECONNRESET, KindOther, true},
 		{"error biasa", errors.New("sesuatu"), KindOther, false},
+		{"mysql auth", &mysql.MySQLError{Number: 1045}, KindAuth, true},
+		{"mysql db tidak ada", &mysql.MySQLError{Number: 1049}, KindNoDatabase, true},
+		{"mysql syntax bukan koneksi", &mysql.MySQLError{Number: 1064}, KindOther, false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -161,5 +165,46 @@ func TestManagerTestRespectsTimeout(t *testing.T) {
 	}
 	if time.Since(start) > 3*time.Second {
 		t.Fatalf("timeout tidak dihormati: %v", time.Since(start))
+	}
+}
+
+func TestManagerWrongEngine(t *testing.T) {
+	src := &fakeSource{params: map[int64]Params{
+		1: {Engine: EngineMySQL, Host: "127.0.0.1", Port: 1, DBName: "x", Username: "u", Password: "p"},
+		2: {Engine: EnginePostgres, Host: "127.0.0.1", Port: 1, DBName: "x", Username: "u", Password: "p"},
+	}}
+	m := NewManager(src)
+	defer m.Close()
+	if _, err := m.Get(context.Background(), 1); !errors.Is(err, ErrWrongEngine) {
+		t.Fatalf("Get pada koneksi MySQL harus ErrWrongEngine, dapat %v", err)
+	}
+	if _, err := m.GetSQL(context.Background(), 2); !errors.Is(err, ErrWrongEngine) {
+		t.Fatalf("GetSQL pada koneksi PG harus ErrWrongEngine, dapat %v", err)
+	}
+}
+
+func TestManagerGetSQLUnreachable(t *testing.T) {
+	src := &fakeSource{params: map[int64]Params{1: {Engine: EngineMariaDB, Host: "127.0.0.1", Port: closedPort(t), DBName: "x", Username: "u", Password: "supersecret", SSLMode: "disable"}}}
+	m := NewManager(src)
+	defer m.Close()
+	_, err := m.GetSQL(context.Background(), 1)
+	if !errors.Is(err, ErrConnectionFailed) {
+		t.Fatalf("harus ErrConnectionFailed, dapat %v", err)
+	}
+	if ce, ok := AsConnError(err); !ok || ce.Kind != KindRefused {
+		t.Fatalf("kind seharusnya refused, dapat %+v", ce)
+	}
+	if strings.Contains(err.Error(), "supersecret") {
+		t.Fatal("error membocorkan password")
+	}
+}
+
+// Menangkap bug "Test selalu memakai driver MySQL": DSN default harus PostgreSQL.
+func TestParamsDSNPerEngine(t *testing.T) {
+	if got := (Params{Host: "h", Port: 5432, DBName: "d", Username: "u", Password: "p"}).DSN(); !strings.HasPrefix(got, "postgres://") {
+		t.Fatalf("DSN default harus postgres://, dapat %s", got)
+	}
+	if got := (Params{Engine: EngineMySQL, Host: "h", Port: 3306, DBName: "d", Username: "u", Password: "p"}).DSN(); !strings.Contains(got, "tcp(") {
+		t.Fatalf("DSN mysql harus memuat tcp(, dapat %s", got)
 	}
 }

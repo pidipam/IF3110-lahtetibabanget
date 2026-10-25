@@ -10,9 +10,10 @@ import (
 )
 
 const (
-	EnvTestDB    = "TEST_DATABASE_URL"
-	EnvTargetDB  = "TARGET_DB_URL"
-	EnvRequireDB = "REQUIRE_DB"
+	EnvTestDB        = "TEST_DATABASE_URL"
+	EnvTargetDB      = "TARGET_DB_URL"
+	EnvRequireDB     = "REQUIRE_DB"
+	EnvTargetMariaDB = "TARGET_MARIADB_ADDR"
 )
 
 func RequireEnv(t testing.TB, name string) string {

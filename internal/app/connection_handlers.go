@@ -15,11 +15,11 @@ import (
 const msgConnInUse = "Koneksi tidak dapat dihapus karena sudah memiliki riwayat migration."
 
 type connForm struct {
-	Name, Host, Port, DBName, Username, SSLMode string
+	Name, Engine, Host, Port, DBName, Username, SSLMode string
 }
 
 func connFormOf(c *dbconn.Connection) connForm {
-	return connForm{Name: c.Name, Host: c.Host, Port: strconv.Itoa(c.Port), DBName: c.DBName, Username: c.Username, SSLMode: c.SSLMode}
+	return connForm{Name: c.Name, Engine: c.Engine, Host: c.Host, Port: strconv.Itoa(c.Port), DBName: c.DBName, Username: c.Username, SSLMode: c.SSLMode}
 }
 
 func readConnForm(r *http.Request) (connForm, dbconn.Input) {
@@ -28,9 +28,9 @@ func readConnForm(r *http.Request) (connForm, dbconn.Input) {
 	if err != nil {
 		n = 0
 	}
-	in := dbconn.Input{Name: r.PostFormValue("name"), Host: r.PostFormValue("host"), Port: n, DBName: r.PostFormValue("db_name"), Username: r.PostFormValue("username"), Password: r.PostFormValue("password"), SSLMode: r.PostFormValue("sslmode")}
+	in := dbconn.Input{Name: r.PostFormValue("name"), Engine: r.PostFormValue("engine"), Host: r.PostFormValue("host"), Port: n, DBName: r.PostFormValue("db_name"), Username: r.PostFormValue("username"), Password: r.PostFormValue("password"), SSLMode: r.PostFormValue("sslmode")}
 	in.Normalize()
-	return connForm{Name: in.Name, Host: in.Host, Port: port, DBName: in.DBName, Username: in.Username, SSLMode: in.SSLMode}, in
+	return connForm{Name: in.Name, Engine: in.Engine, Host: in.Host, Port: port, DBName: in.DBName, Username: in.Username, SSLMode: in.SSLMode}, in
 }
 
 func (a *App) loadConn(w http.ResponseWriter, r *http.Request) (*dbconn.Connection, bool) {
@@ -61,7 +61,7 @@ func (a *App) adminConnections(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) renderConnForm(w http.ResponseWriter, r *http.Request, status int, conn *dbconn.Connection, f connForm, errMsg, okMsg string) {
-	data := map[string]any{"Conn": conn, "Form": f, "SSLModes": dbconn.SSLModes()}
+	data := map[string]any{"Conn": conn, "Form": f, "SSLModes": dbconn.SSLModes(), "Engines": dbconn.Engines()}
 	title := "Tambah Koneksi"
 	if conn != nil {
 		grants, err := a.GrantStore.ListByConnection(r.Context(), conn.ID)
@@ -81,7 +81,7 @@ func (a *App) renderConnForm(w http.ResponseWriter, r *http.Request, status int,
 }
 
 func (a *App) adminConnectionNew(w http.ResponseWriter, r *http.Request) {
-	a.renderConnForm(w, r, http.StatusOK, nil, connForm{Port: "5432", SSLMode: "prefer"}, "", "")
+	a.renderConnForm(w, r, http.StatusOK, nil, connForm{Engine: dbconn.EnginePostgres, Port: "5432", SSLMode: "prefer"}, "", "")
 }
 
 func connErrMsg(err error) (string, bool) {
@@ -124,6 +124,10 @@ func (a *App) adminConnectionUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f, in := readConnForm(r)
+	f.Engine = c.Engine
+	if c != nil {
+		f.Engine = c.Engine
+	}
 	_, err := a.Conns.Update(r.Context(), c.ID, in)
 	if msg, ok := connErrMsg(err); ok {
 		a.renderConnForm(w, r, http.StatusUnprocessableEntity, c, f, msg, "")
@@ -193,6 +197,9 @@ func (a *App) adminConnectionTestEdit(w http.ResponseWriter, r *http.Request) {
 func (a *App) testConnection(w http.ResponseWriter, r *http.Request, c *dbconn.Connection) {
 	ctx := r.Context()
 	f, in := readConnForm(r)
+	if c != nil {
+		f.Engine = c.Engine
+	}
 	if err := in.Validate(c == nil); err != nil {
 		a.renderConnForm(w, r, http.StatusUnprocessableEntity, c, f, err.Error(), "")
 		return

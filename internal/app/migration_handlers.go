@@ -34,9 +34,10 @@ func (a *App) migrationRoutes() {
 }
 
 type migScope struct {
-	P    authz.Principal
-	DBID int64
-	Name string
+	P      authz.Principal
+	DBID   int64
+	Name   string
+	Engine string
 }
 
 // migScope memastikan user login, dbID valid, dan user boleh melihat database tersebut.
@@ -56,7 +57,11 @@ func (a *App) migScope(w http.ResponseWriter, r *http.Request) (migScope, bool) 
 		a.migrationError(w, r, err)
 		return migScope{}, false
 	}
-	return migScope{P: p, DBID: dbID, Name: name}, true
+	eng := ""
+	if c, err := a.Conns.Get(r.Context(), dbID); err == nil {
+		eng = c.Engine
+	}
+	return migScope{P: p, DBID: dbID, Name: name, Engine: eng}, true
 }
 
 func (a *App) migrationError(w http.ResponseWriter, r *http.Request, err error) {
@@ -73,6 +78,8 @@ func (a *App) migrationError(w http.ResponseWriter, r *http.Request, err error) 
 		a.RenderError(w, r, http.StatusConflict, "Tidak Dapat Diubah", err.Error(), false)
 	case errors.Is(err, migration.ErrChanged):
 		a.RenderError(w, r, http.StatusConflict, "Tidak Dapat Dijalankan", err.Error(), false)
+	case errors.Is(err, migration.ErrExplainUnsupported):
+		a.RenderError(w, r, http.StatusNotImplemented, "Tidak Didukung", err.Error(), false)
 	default:
 		a.fail(w, r, err)
 	}
@@ -225,6 +232,7 @@ func (a *App) renderMigrationReviewWith(w http.ResponseWriter, r *http.Request, 
 	v := a.View(r, "Tinjau Migration", map[string]any{
 		"DBID": sc.DBID, "DBName": sc.Name, "M": rv.M,
 		"NextVersion": rv.NextVersion, "Checksum": rv.Checksum, "Back": migBase(sc.DBID), "Explain": ex,
+		"IsMySQL": dbconn.IsMySQLFamily(sc.Engine),
 	})
 	v.Error = msg
 	a.Render.Render(w, status, "migration_review", v)

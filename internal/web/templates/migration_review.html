@@ -13,7 +13,11 @@
 <div class="card">
     <h2>SQL yang akan dijalankan</h2>
     <pre style="margin:0;padding:16px;overflow:auto;white-space:pre-wrap;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.04);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px">{{$m.SQL}}</pre>
-    <p class="muted">Seluruh SQL dijalankan dalam satu transaction. Jika ada statement yang gagal, semua perubahan di-rollback dan migration tercatat gagal.</p>
+    {{if .Data.IsMySQL}}
+        <p class="muted">SQL dijalankan statement per statement di dalam transaction. <strong>Perhatian:</strong> pada MySQL/MariaDB, perintah DDL (CREATE/ALTER/DROP) otomatis di-commit dan tidak dapat di-rollback. Jika ada statement yang gagal, statement DDL sebelumnya mungkin sudah diterapkan.</p>
+    {{else}}
+        <p class="muted">Seluruh SQL dijalankan dalam satu transaction. Jika ada statement yang gagal, semua perubahan di-rollback dan migration tercatat gagal.</p>
+    {{end}}
     <form method="post" action="{{.Data.Back}}/{{$m.ID}}/execute">
         <input type="hidden" name="csrf_token" value="{{.CSRF}}">
         <input type="hidden" name="checksum" value="{{.Data.Checksum}}">
@@ -30,6 +34,7 @@
 </div>
 <div class="card">
     <h2>Analisis execution plan</h2>
+    {{if not .Data.IsMySQL}}
     <p class="muted">EXPLAIN menampilkan rencana eksekusi, sedangkan EXPLAIN ANALYZE juga mengukur waktu dan jumlah baris aktual. Semua perubahan di-rollback.</p>
     <form method="post" action="{{.Data.Back}}/{{$m.ID}}/explain">
         <input type="hidden" name="csrf_token" value="{{.CSRF}}">
@@ -93,7 +98,10 @@
         {{end}}
         {{if .Stopped}}
             <p class="muted">Analisis berhenti di statement yang gagal.</p>
-        {{end}}
+    {{end}}
+    {{end}}
+    {{else}}
+        <p class="muted">Analisis execution plan belum didukung untuk MySQL/MariaDB.</p>
     {{end}}
 </div>
 {{end}}

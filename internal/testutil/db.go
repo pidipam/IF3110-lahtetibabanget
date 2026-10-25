@@ -2,6 +2,7 @@ package testutil
 
 import (
 	"context"
+	"net"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -25,7 +26,7 @@ func NewTestDB(t testing.TB) *pgxpool.Pool {
 	t.Helper()
 	dsn := RequireEnv(t, EnvTestDB)
 	ctx := context.Background()
-	auth.BcryptCost = bcrypt.MinCost 
+	auth.BcryptCost = bcrypt.MinCost
 
 	db, err := platformdb.Connect(ctx, dsn)
 	if err != nil {
@@ -156,5 +157,22 @@ func SeedGrant(t testing.TB, db *pgxpool.Pool, groupID, connID int64, level auth
 	t.Helper()
 	if _, err := dbconn.NewGrantStore(db).Set(context.Background(), groupID, connID, level); err != nil {
 		t.Fatalf("seed grant: %v", err)
+	}
+}
+
+func MariaDB(t testing.TB) func(*dbconn.Input) {
+	t.Helper()
+	addr := RequireEnv(t, EnvTargetMariaDB)
+	host, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		t.Fatalf("%s tidak valid: %v", EnvTargetMariaDB, err)
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		t.Fatalf("port %s tidak valid: %v", EnvTargetMariaDB, err)
+	}
+	return func(in *dbconn.Input) {
+		in.Engine, in.Host, in.Port = dbconn.EngineMariaDB, host, port
+		in.DBName, in.Username, in.Password = "sample", "app", "app"
 	}
 }

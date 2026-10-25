@@ -13,56 +13,56 @@ import (
 )
 
 type PlanNode struct {
-	Depth int
-	Prefix string
-	Node string
-	Relation string
-	Index string
-	Join string
+	Depth       int
+	Prefix      string
+	Node        string
+	Relation    string
+	Index       string
+	Join        string
 	StartupCost float64
-	TotalCost float64
-	PlanRows float64
-	HasActual bool
-	ActualRows float64
-	ActualTime float64
-	Loops float64
+	TotalCost   float64
+	PlanRows    float64
+	HasActual   bool
+	ActualRows  float64
+	ActualTime  float64
+	Loops       float64
 }
 
 type StatementPlan struct {
-	Number int
-	SQL string
-	NoPlan bool
-	Error string
-	Nodes []PlanNode
-	HasTiming bool
-	PlanningTime float64
+	Number        int
+	SQL           string
+	NoPlan        bool
+	Error         string
+	Nodes         []PlanNode
+	HasTiming     bool
+	PlanningTime  float64
 	ExecutionTime float64
 }
 
 type Explanation struct {
-	Analyze bool
+	Analyze    bool
 	Statements []StatementPlan
-	Stopped bool
+	Stopped    bool
 }
 
 type rawNode struct {
-	NodeType string `json:"Node Type"`
-	Operation string `json:"Operation"`
-	RelationName string `json:"Relation Name"`
-	IndexName string `json:"Index Name"`
-	JoinType string `json:"Join Type"`
-	StartupCost float64 `json:"Startup Cost"`
-	TotalCost float64 `json:"Total Cost"`
-	PlanRows float64 `json:"Plan Rows"`
-	ActualRows *float64 `json:"Actual Rows"`
-	ActualTotalTime *float64 `json:"Actual Total Time"`
-	ActualLoops *float64 `json:"Actual Loops"`
-	Plans []rawNode `json:"Plans"`
+	NodeType        string    `json:"Node Type"`
+	Operation       string    `json:"Operation"`
+	RelationName    string    `json:"Relation Name"`
+	IndexName       string    `json:"Index Name"`
+	JoinType        string    `json:"Join Type"`
+	StartupCost     float64   `json:"Startup Cost"`
+	TotalCost       float64   `json:"Total Cost"`
+	PlanRows        float64   `json:"Plan Rows"`
+	ActualRows      *float64  `json:"Actual Rows"`
+	ActualTotalTime *float64  `json:"Actual Total Time"`
+	ActualLoops     *float64  `json:"Actual Loops"`
+	Plans           []rawNode `json:"Plans"`
 }
 
 type rawExplain struct {
-	Plan rawNode `json:"Plan"`
-	PlanningTime *float64 `json:"Planning Time"`
+	Plan          rawNode  `json:"Plan"`
+	PlanningTime  *float64 `json:"Planning Time"`
 	ExecutionTime *float64 `json:"Execution Time"`
 }
 
@@ -83,7 +83,7 @@ func SplitStatements(sql string) []string {
 			} else {
 				i += end + 4
 			}
-		case sql[i] == '\'' || sql[i] == '"':
+		case sql[i] == '\'' || sql[i] == '"' || sql[i] == '`':
 			q := sql[i]
 			i++
 			for i < len(sql) {
@@ -174,6 +174,11 @@ func flatten(out *[]PlanNode, n rawNode, depth int, prefix, guide string) {
 }
 
 func (e *Executor) Explain(ctx context.Context, dbID int64, sql string, analyze bool) (*Explanation, error) {
+	if et, ok := e.targets.(SQLTargets); ok {
+		if eng, err := et.Engine(ctx, dbID); err == nil && dbconn.IsMySQLFamily(eng) {
+			return nil, ErrExplainUnsupported
+		}
+	}
 	pool, err := e.targets.Pool(ctx, dbID)
 	if err != nil {
 		return nil, err

@@ -1,13 +1,13 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/url"
 	"sort"
 	"strconv"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/auth"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/authz"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/dbconn"
@@ -103,18 +103,40 @@ func (a *App) dbFailure(w http.ResponseWriter, r *http.Request, c *dbconn.Connec
 	a.Render.Render(w, http.StatusServiceUnavailable, "database_error", v)
 }
 
-func (a *App) openCatalog(w http.ResponseWriter, r *http.Request, c *dbconn.Connection) (*pgxpool.Pool, *explorer.Catalog, bool) {
-	pool, err := a.Manager.Get(r.Context(), c.ID)
+type pageFetcher func(ctx context.Context, cat *explorer.Catalog, schema, table string, page, size int) (*explorer.DataPage, error)
+
+func (a *App) openCatalog(w http.ResponseWriter, r *http.Request, c *dbconn.Connection) (pageFetcher, *explorer.Catalog, bool) {
+	ctx := r.Context()
+	if dbconn.IsMySQLFamily(c.Engine) {
+		db, err := a.Manager.GetSQL(ctx, c.ID)
+		if err != nil {
+			a.dbFailure(w, r, c, err)
+			return nil, nil, false
+		}
+		cat, err := explorer.IntrospectSQL(ctx, db)
+		if err != nil {
+			a.dbFailure(w, r, c, err)
+			return nil, nil, false
+		}
+		fetch := func(ctx context.Context, cat *explorer.Catalog, schema, table string, page, size int) (*explorer.DataPage, error) {
+			return explorer.FetchPageSQL(ctx, db, cat, schema, table, page, size)
+		}
+		return fetch, cat, true
+	}
+	pool, err := a.Manager.Get(ctx, c.ID)
 	if err != nil {
 		a.dbFailure(w, r, c, err)
 		return nil, nil, false
 	}
-	cat, err := explorer.Introspect(r.Context(), pool)
+	cat, err := explorer.Introspect(ctx, pool)
 	if err != nil {
 		a.dbFailure(w, r, c, err)
 		return nil, nil, false
 	}
-	return pool, cat, true
+	fetch := func(ctx context.Context, cat *explorer.Catalog, schema, table string, page, size int) (*explorer.DataPage, error) {
+		return explorer.FetchPage(ctx, pool, cat, schema, table, page, size)
+	}
+	return fetch, cat, true
 }
 
 func (a *App) databaseView(w http.ResponseWriter, r *http.Request) {
@@ -157,13 +179,13 @@ func (a *App) databaseTable(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	pool, cat, ok := a.openCatalog(w, r, c)
+	fetch, cat, ok := a.openCatalog(w, r, c)
 	if !ok {
 		return
 	}
 	schema, table := r.PathValue("schema"), r.PathValue("table")
 	page, size := explorer.ParsePageParams(r.URL.Query().Get("page"), r.URL.Query().Get("page_size"))
-	dp, err := explorer.FetchPage(r.Context(), pool, cat, schema, table, page, size)
+	dp, err := fetch(r.Context(), cat, schema, table, page, size)
 	if errors.Is(err, explorer.ErrTableNotFound) {
 		a.notFound(w, r)
 		return
