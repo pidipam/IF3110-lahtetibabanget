@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/dbconn"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/migration"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/testutil"
 )
@@ -338,5 +339,30 @@ func TestMigrationReviewAndExecuteFlow(t *testing.T) {
 	expectStatus(t, v.post(pending+"/execute", url.Values{"checksum": {migration.SQLChecksum(pendingSQL)}, "confirm": {"on"}}), http.StatusForbidden)
 	if count("status = 'draft'") != 1 || tableExists("zz_mig_h3") {
 		t.Fatal("View Only berhasil menjalankan migration")
+	}
+}
+
+func TestMigrationExecuteTargetDown(t *testing.T) {
+	f := setupMigPages(t)
+	e := f.e
+	conn := testutil.SeedConnection(t, e.db, func(in *dbconn.Input) { in.Port = 5499 }) // tidak ada server di port ini
+	migGrant(e, e.userGroup("editor"), conn.ID, "edit")
+	base := fmt.Sprintf("/databases/%d/migrations", conn.ID)
+
+	ed := e.client()
+	expectStatus(t, ed.login("editor", "password123"), http.StatusSeeOther)
+	sql := "CREATE TABLE zz_mig_down (id int);"
+	w := ed.post(base, url.Values{"title": {"target mati"}, "sql": {sql}})
+	expectStatus(t, w, http.StatusSeeOther)
+	path := strings.SplitN(w.Header().Get("Location"), "?", 2)[0]
+
+	res := ed.post(path+"/execute", url.Values{"checksum": {migration.SQLChecksum(sql)}, "confirm": {"on"}})
+	expectStatus(t, res, http.StatusServiceUnavailable)
+	b := res.Body.String()
+	if strings.Contains(b, "5499") || strings.Contains(b, "127.0.0.1") {
+		t.Fatal("halaman error membocorkan host atau port")
+	}
+	if strings.Count(b, "<!doctype html>") != 1 {
+		t.Fatal("respons error ditulis lebih dari sekali")
 	}
 }

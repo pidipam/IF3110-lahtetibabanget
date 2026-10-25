@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/dbconn"
 )
 
 var ErrBusy = errors.New("ada migration lain yang sedang berjalan pada database ini, coba lagi sebentar")
@@ -67,12 +68,12 @@ func (e *Executor) Execute(ctx context.Context, dbID, id, userID int64) (*Migrat
 	}
 	tconn, err := pool.Acquire(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrTargetUnavailable, err)
+		return nil, fmt.Errorf("%w: %w", ErrTargetUnavailable, dbconn.Wrap(err))
 	}
 	defer tconn.Release()
 	tx, err := tconn.Begin(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrTargetUnavailable, err)
+		return nil, fmt.Errorf("%w: %w", ErrTargetUnavailable, dbconn.Wrap(err))
 	}
 	defer tx.Rollback(context.WithoutCancel(ctx)) // no-op bila sudah commit
 

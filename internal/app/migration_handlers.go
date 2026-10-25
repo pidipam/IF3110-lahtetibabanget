@@ -7,6 +7,7 @@ import (
 
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/auth"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/authz"
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/dbconn"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/migration"
 )
 
@@ -66,8 +67,7 @@ func (a *App) migrationError(w http.ResponseWriter, r *http.Request, err error) 
 	case errors.Is(err, migration.ErrBusy):
 		a.RenderError(w, r, http.StatusConflict, "Sedang Sibuk", err.Error(), false)
 	case errors.Is(err, migration.ErrTargetUnavailable):
-		a.Logger.Error("target database tidak dapat dihubungi", "path", r.URL.Path, "err", err)
-		a.RenderError(w, r, http.StatusBadGateway, "Koneksi Database Gagal", "Database target tidak dapat dihubungi. Periksa koneksi lalu coba lagi.", false)
+		a.migrationTargetDown(w, r, err)
 	case errors.Is(err, migration.ErrNotDraft):
 		a.RenderError(w, r, http.StatusConflict, "Tidak Dapat Diubah", err.Error(), false)
 	case errors.Is(err, migration.ErrChanged):
@@ -273,4 +273,27 @@ func (a *App) migrationExecute(w http.ResponseWriter, r *http.Request) {
 		target += "?ok=migration_success"
 	}
 	http.Redirect(w, r, target, http.StatusSeeOther)
+}
+
+// migrationTargetDown memakai template dan pesan yang sama dengan halaman viewer (503, tanpa host/port).
+func (a *App) migrationTargetDown(w http.ResponseWriter, r *http.Request, err error) {
+	id, ok := pathID(r, "dbID")
+	if !ok {
+		a.fail(w, r, err)
+		return
+	}
+	c, cerr := a.Conns.Get(r.Context(), id)
+	if cerr != nil {
+		a.fail(w, r, err)
+		return
+	}
+	kind := dbconn.KindOther
+	if ce, ok := dbconn.AsConnError(err); ok {
+		kind = ce.Kind
+	}
+	a.Logger.Warn("target database unreachable", "connection_id", c.ID, "kind", kind.String())
+	v := a.View(r, "Database Tidak Dapat Dihubungi", map[string]any{
+		"Conn": c, "Message": kind.UserMessage(), "Code": http.StatusServiceUnavailable, "Retry": migBase(c.ID),
+	})
+	a.Render.Render(w, http.StatusServiceUnavailable, "database_error", v)
 }
