@@ -30,7 +30,7 @@ func classify(err error) (Kind, bool) {
 	if errors.As(err, &dns) {
 		return KindHost, true
 	}
-	if errors.Is(err, syscall.ECONNREFUSED) {
+	if errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.Errno(10061)) {
 		return KindRefused, true
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
