@@ -182,7 +182,7 @@ internal/db           seed database sampel
 ## Tim
 
 | Bagian | Anggota | NIM |
-|---|---|
+|---|---|---|
 | Autentikasi, session, otorisasi, kelola user dan grup | Helena Kristela Sarhawa | 13524109 |
 | Fondasi, koneksi database, viewer | Vara Azzara Ramli Pulukadang | 13524091 |
 | Migration, dokumentasi | Keisha Rizka Syofyani | 13524073 |
