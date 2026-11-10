@@ -14,6 +14,7 @@ import (
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/migration"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/users"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/web"
+	webui "github.com/pidipam/IF3110-lahtetibabanget/web"
 )
 
 type Options struct {
@@ -70,7 +71,7 @@ func New(opt Options) (*App, error) {
 	}, 0)
 	a.Migrations = migration.NewService(repo, a.migrationExec, a.Authz)
 	a.routes()
-	a.handler = securityHeaders(a.logRequests(a.Auth.LoadSession(a.mux)))
+	a.handler = securityHeaders(a.logRequests(withSPA(webui.Handler(), a.Auth.LoadSession(a.mux))))
 	return a, nil
 }
 
@@ -126,6 +127,21 @@ func (a *App) logRequests(next http.Handler) http.Handler {
 		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(sw, r)
 		a.Logger.Info("request", "method", r.Method, "path", r.URL.Path, "status", sw.status, "duration", time.Since(start))
+	})
+}
+
+func withSPA(spa, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		safe := r.Method == http.MethodGet || r.Method == http.MethodHead
+		if safe && r.URL.Path == strings.TrimSuffix(webui.Base, "/") {
+			http.Redirect(w, r, webui.Base, http.StatusMovedPermanently)
+			return
+		}
+		if safe && strings.HasPrefix(r.URL.Path, webui.Base) {
+			spa.ServeHTTP(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
 	})
 }
 
