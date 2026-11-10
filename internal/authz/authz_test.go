@@ -9,10 +9,15 @@ import (
 type fakeStore struct {
 	levels map[int64][]Level
 	err    error
+	leads map[int64][]int64
 }
 
 func (f fakeStore) GroupLevels(ctx context.Context, userID, dbID int64) ([]Level, error) {
 	return f.levels[dbID], f.err
+}
+
+func (f fakeStore) LeaderGroups(ctx context.Context, userID, dbID int64) ([]int64, error) {
+	return f.leads[dbID], f.err
 }
 
 func (f fakeStore) DatabaseLevels(ctx context.Context, userID int64) (map[int64][]Level, error) {
@@ -107,5 +112,33 @@ func TestParseLevel(t *testing.T) {
 	}
 	if LevelEdit.String() != "edit" || LevelView.Label() != "View Only" {
 		t.Fatal("String/Label salah")
+	}
+}
+
+func TestApproveMigrationOnlyForLeaders(t *testing.T) {
+	a := New(fakeStore{levels: map[int64][]Level{1: {LevelEdit}, 2: {LevelEdit}}, leads: map[int64][]int64{1: {7, 9}}})
+	if err := a.Can(context.Background(), Principal{UserID: 1}, 1, ApproveMigration); err != nil {
+		t.Fatalf("leader grup harus boleh menyetujui: %v", err)
+	}
+	if err := a.Can(context.Background(), Principal{UserID: 1}, 2, ApproveMigration); err != ErrForbidden {
+		t.Fatalf("akses edit tanpa jabatan leader harus ditolak, got %v", err)
+	}
+	if err := a.Can(context.Background(), Principal{UserID: 1, IsAdmin: true}, 2, ApproveMigration); err != ErrForbidden {
+		t.Fatalf("admin bukan leader harus ditolak, got %v", err)
+	}
+	groups, err := a.ApproverGroups(context.Background(), Principal{UserID: 1}, 1)
+	if err != nil || len(groups) != 2 || groups[0] != 7 || groups[1] != 9 {
+		t.Fatalf("ApproverGroups salah: %v %v", groups, err)
+	}
+	boom := errors.New("db mati")
+	if err := New(fakeStore{err: boom}).Can(context.Background(), Principal{UserID: 1}, 1, ApproveMigration); !errors.Is(err, boom) {
+		t.Fatalf("error store harus diteruskan, got %v", err)
+	}
+}
+
+func TestApproveMigrationWithoutLeaderStore(t *testing.T) {
+	var s Store = struct{ Store }{fakeStore{levels: map[int64][]Level{1: {LevelEdit}}, leads: map[int64][]int64{1: {7}}}}
+	if err := New(s).Can(context.Background(), Principal{UserID: 1}, 1, ApproveMigration); err != ErrForbidden {
+		t.Fatalf("store tanpa data leader harus menolak, got %v", err)
 	}
 }

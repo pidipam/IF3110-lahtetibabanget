@@ -48,3 +48,20 @@ func (s *PGStore) DatabaseLevels(ctx context.Context, userID int64) (map[int64][
 	}
 	return out, rows.Err()
 }
+
+func (s *PGStore) LeaderGroups(ctx context.Context, userID, dbID int64) ([]int64, error) {
+	rows, err := s.db.Query(ctx, "SELECT g.id FROM groups g JOIN group_db_access a ON a.group_id = g.id JOIN users u ON u.id = g.leader_id WHERE g.leader_id = $1 AND a.db_id = $2 AND u.is_active ORDER BY g.id", userID, dbID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
