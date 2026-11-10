@@ -80,6 +80,22 @@ API sesi:
 401 memakai kode `unauthenticated` (belum login) atau `session_expired` (sesi berakhir atau dicabut).
 Token CSRF yang salah menghasilkan 403 `csrf_invalid`.
 
+Halaman admin SPA (menu User dan Grup hanya tampil untuk admin):
+
+| Halaman | Isi |
+|---|---|
+| `/app/admin/user` | Daftar user dengan pencarian dan paginasi |
+| `/app/admin/user/baru` | Tambah user |
+| `/app/admin/user/{id}` | Ubah username, admin, aktif, dan reset password |
+| `/app/admin/grup` | Daftar Grup dengan pencarian dan paginasi |
+| `/app/admin/grup/baru` | Tambah Grup |
+| `/app/admin/grup/{id}` | Ubah Grup, anggota, akses database, dan hapus Grup |
+
+Halaman HTML lama `/admin/users`, `/admin/users/new`, `/admin/users/{id}`, dan `/admin/groups` sekarang
+diarahkan ke halaman SPA di atas. `/admin/groups/{id}` tinggal berisi tautan ke SPA dan ke halaman akses
+database `/admin/groups/{id}/access`. Login, logout, dan beranda HTML masih dipakai halaman database dan
+migration, jadi belum dihapus.
+
 API admin (hanya admin; non-admin 403 `forbidden`):
 
 | Endpoint | Keterangan |
