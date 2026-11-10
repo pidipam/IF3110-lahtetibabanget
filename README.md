@@ -54,130 +54,29 @@ volume. Untuk menghapus semua data (termasuk akun admin) jalankan `docker compos
 
 `make run` membaca file `.env` bila ada (lihat `.env.example`; jangan di-commit).
 
-### SPA (Milestone 2)
+### SPA
 
-SPA ada di `web/` (Vite, React, TypeScript, React Router, TanStack Query, Tailwind) dan butuh Node.js 20 atau lebih baru.
+SPA ada di `web/` (Vite, React, TypeScript, Tailwind) dan butuh Node.js 20 atau lebih baru.
 
 ```bash
-make web-build   # npm ci lalu build ke web/dist; hasilnya di-embed ke binary Go
-make run         # SPA tersedia di http://localhost:8080/app/
+make web-build   # build ke web/dist, hasilnya di-embed ke binary Go
+make run         # buka http://localhost:8080/app/
 ```
 
-Saat development, jalankan `make run` lalu `make web-dev` di terminal lain, kemudian buka
-http://localhost:5173/app/. Vite meneruskan `/api` ke `:8080`, jadi cookie sesi tetap satu origin.
-Selama halaman M1 masih dipakai, SPA dipasang di `/app/`. Rute selain `/api/*` di bawah `/app/`
-jatuh ke `index.html`. Bila `web/dist` belum dibuild, `/app/` mengembalikan 503.
+Saat development, jalankan `make web-dev` di terminal lain lalu buka http://localhost:5173/app/.
+Vite meneruskan `/api` ke `:8080` sehingga cookie sesi tetap satu origin.
 
-API sesi:
-
-| Endpoint | Keterangan |
-|---|---|
-| `GET /api/csrf` | Token CSRF untuk header `X-CSRF-Token`. Sebelum login berisi token pre-login, sesudah login token sesi. |
-| `POST /api/login` | Body `{"username","password"}`. 200 berisi data seperti `/api/me`; 401 `invalid_credentials`. |
-| `POST /api/logout` | Mencabut sesi, 204. |
-| `GET /api/me` | User, `is_admin`, `csrf_token`, dan `databases` (id, nama, engine, level `view` atau `edit`). |
-
-401 memakai kode `unauthenticated` (belum login) atau `session_expired` (sesi berakhir atau dicabut).
-Token CSRF yang salah menghasilkan 403 `csrf_invalid`.
-
-Halaman admin SPA (menu User dan Grup hanya tampil untuk admin):
-
-| Halaman | Isi |
-|---|---|
-| `/app/admin/user` | Daftar user dengan pencarian dan paginasi |
-| `/app/admin/user/baru` | Tambah user |
-| `/app/admin/user/{id}` | Ubah username, admin, aktif, dan reset password |
-| `/app/admin/grup` | Daftar Grup dengan pencarian dan paginasi |
-| `/app/admin/grup/baru` | Tambah Grup |
-| `/app/admin/grup/{id}` | Ubah Grup, anggota, akses database, dan hapus Grup |
-
-Halaman HTML lama `/admin/users`, `/admin/users/new`, `/admin/users/{id}`, dan `/admin/groups` sekarang
-diarahkan ke halaman SPA di atas. `/admin/groups/{id}` tinggal berisi tautan ke SPA dan ke halaman akses
-database `/admin/groups/{id}/access`. Login, logout, dan beranda HTML masih dipakai halaman database dan
-migration, jadi belum dihapus.
-
-API admin (hanya admin; non-admin 403 `forbidden`):
-
-| Endpoint | Keterangan |
-|---|---|
-| `GET /api/admin/users` | Daftar user. Query `page`, `page_size` (default 20, maks 100), `q` (cari username). |
-| `POST /api/admin/users` | Body `{"username","password","is_admin"}`, 201. |
-| `GET /api/admin/users/{id}` | Detail user beserta grupnya. |
-| `PATCH /api/admin/users/{id}` | Field opsional `username`, `is_admin`, `is_active`. |
-| `POST /api/admin/users/{id}/password` | Body `{"password"}`, 204. Semua sesi user dicabut. |
-| `GET /api/admin/groups` | Daftar grup dengan `member_count`. Query sama dengan daftar user (`q` mencari nama). |
-| `POST /api/admin/groups` | Body `{"name","description"}`, 201. |
-| `GET /api/admin/groups/{id}` | Detail grup, `members`, dan `access`. |
-| `PATCH /api/admin/groups/{id}` | Field opsional `name`, `description`. |
-| `DELETE /api/admin/groups/{id}` | 204. Sesi semua anggota dicabut. |
-| `GET /api/admin/groups/{id}/candidates` | User aktif yang belum menjadi anggota. |
-| `POST /api/admin/groups/{id}/members` | Body `{"user_id"}`, 204. |
-| `DELETE /api/admin/groups/{id}/members/{userID}` | 204, atau 404 bila bukan anggota. |
-| `GET /api/admin/groups/{id}/access` | Semua database beserta level grup (`none`, `view`, `edit`). |
-| `PUT /api/admin/groups/{id}/access` | Body `{"access":[{"db_id","level"}]}`. Semua item divalidasi sebelum ada yang diubah. |
-
-| `PUT /api/admin/groups/{id}/leader` | Body `{"user_id": 5}` atau `{"user_id": null}`. Leader harus anggota aktif Grup. |
-
-Daftar berpaginasi berbentuk `{"items":[...],"page":1,"page_size":20,"total":57}`.
-Hak yang turun (nonaktif, admin dicabut, reset password, keluar grup, akses turun atau dicabut,
-grup dihapus) langsung mencabut sesi user terkait. Hak yang naik (jadi admin, masuk grup, akses naik)
-membuat sesi dirotasi pada request berikutnya. Admin tidak bisa mencabut hak admin atau menonaktifkan
-dirinya sendiri (422 `self_lockout`). Username atau nama grup yang sudah dipakai menghasilkan 409 `conflict`.
-
-### Halaman migration SPA (tahap 1)
-
-| Halaman | Isi |
-|---|---|
-| `/app/migration` | Pilih database (langsung masuk bila hanya punya satu) |
-| `/app/migration/database/{id}` | Daftar migration database |
-| `/app/migration/database/{id}/baru` | Editor: judul, SQL up, SQL down, irreversible dengan alasan, mode normal atau batch |
-| `/app/migration/{id}` | Review: SQL up dan down, approver dan statusnya, tombol Ajukan review dan Jalankan |
-| `/app/migration/{id}/ubah` | Ubah migration (membuat revisi baru) |
-| `/app/migration/database/{id}/riwayat` | Riwayat eksekusi. Checkbox Hide rollback disimpan di URL (`?hide_rollback=1`) |
-| `/app/migration/database/{id}/riwayat/{executionId}` | Detail eksekusi dan SQL yang benar-benar dijalankan |
-| `/app/migration/job/{jobId}` | Monitor job: polling berkala, progres batch dan row, aksi sesuai `allowed_actions` |
-
-API migration belum tersedia, jadi SPA memakai data contoh sesuai `internal/migration/dto.go`. Halaman
-menampilkan banner "Data contoh" selama mode ini aktif. Untuk memakai API sungguhan, build dengan
-`VITE_MIGRATION_API=http`. Path endpoint yang dipakai ada di `web/src/lib/migrations/client.ts`.
-Daftar approver selalu memakai API sungguhan `GET /api/databases/{id}/approvers`.
-
-Riwayat mengharapkan `GET /api/databases/{id}/history?hide_rollback=true|false&page=&page_size=` yang
-mengembalikan `HistoryItemResponse` (array, atau `{items, page, page_size, total}`), dan
-`GET /api/databases/{id}/history/{executionId}` untuk detail. `hide_rollback=true` menyembunyikan rollback
-beserta eksekusi yang dibatalkannya.
-
-Monitor job memakai kontrak usulan berikut (perlu disepakati dengan pemilik antrean, worker, dan model eksekusi):
-
-- `GET /api/jobs/{id}` mengembalikan `job_id`, `execution_id`, `migration_id`, `database_id`, `title`,
-  `kind` (`up`, `rollback`, `forward`), `status` (`queued`, `running`, `success`, `failed`, `partial`,
-  `uncertain`, `partially_reverted`, `cancelled`), `attempt`, `is_batch_mode`, `batches_committed`,
-  `batches_total` (boleh null), `rows_committed`, `rows_total` (boleh null), `error_message`, `queued_at`,
-  `started_at`, `finished_at`, `updated_at`, dan `allowed_actions` (isinya `rollback`, `forward`, `retry`,
-  `resume`, `cancel`).
-- `POST /api/jobs/{id}/{aksi}` mengembalikan `{"message", "migration_id", "needs_approval", "job_id"?}`.
-  SPA hanya menampilkan tombol yang ada di `allowed_actions`.
-- Polling tiap 2 detik saat `queued` atau `running`, tiap 10 detik saat `partial`, `uncertain`, atau
-  `partially_reverted`, dan berhenti di status akhir. Polling berhenti saat tab tidak aktif.
+Halaman migration masih memakai data contoh sampai API migration tersedia. Build dengan
+`VITE_MIGRATION_API=http` untuk memakai API sungguhan.
 
 ### Persetujuan migration
 
-Setiap eksekusi migration (`up`, `rollback`, `forward`) yang berstatus `pending_review` harus disetujui
-leader setiap Grup yang punya akses `view` atau `edit` ke database tujuan. Aturannya:
+Setiap eksekusi migration harus disetujui leader dari setiap grup yang punya akses ke database tujuan.
 
-- Grup tanpa leader aktif menahan proses (status `blocked`) dengan pesan yang menyebut Grup tersebut.
-- Pengaju tidak boleh menyetujui permintaannya sendiri. Kalau pengaju adalah leader Grup wajib, admin harus menunjuk leader lain.
-- Satu keputusan berlaku untuk semua Grup wajib yang dipimpin orang yang sama. Satu penolakan (alasan wajib) menolak permintaan.
-- Persetujuan terikat pada nomor revisi. Kalau revisi berubah, persetujuan lama tidak dihitung lagi.
-- Bila semua Grup setuju, status eksekusi menjadi `approved`. Worker wajib memanggil `approval.Service.Check` sebelum menjalankan. Kalau Check gagal (misalnya ada Grup baru yang diberi akses), worker memanggil `Reopen` agar permintaan kembali ke `pending_review`.
-
-| Endpoint | Keterangan |
-|---|---|
-| `GET /api/databases/{id}/approvers` | Grup wajib beserta leader-nya, dan `ready=false` bila ada Grup tanpa leader. Butuh akses view. |
-| `GET /api/approvals?mine=true` | Permintaan yang menunggu keputusan Grup yang saya pimpin. Tanpa `mine`: semua permintaan `pending_review` di database yang bisa saya lihat. |
-| `GET /api/migrations/{id}/approvals` | Status persetujuan eksekusi terakhir migration (butuh akses view). |
-| `POST /api/migrations/{id}/approve` | Body `{"revision_number"}`. 403 bila bukan leader Grup wajib atau pengaju sendiri, 409 bila revisi berubah atau sudah diputuskan. |
-| `POST /api/migrations/{id}/reject` | Body `{"revision_number","reason"}`. Alasan wajib, maksimal 500 karakter. |
+- Grup tanpa leader aktif menahan proses.
+- Pengaju tidak boleh menyetujui permintaannya sendiri.
+- Persetujuan terikat pada revisi. Bila migration diubah, persetujuan lama tidak berlaku.
+- Satu penolakan menolak permintaan.
 
 ### Konfigurasi (environment)
 
