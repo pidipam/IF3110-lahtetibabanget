@@ -10,6 +10,7 @@ import { useMigrations } from "../../lib/migrations";
 import type { Migration } from "../../lib/migrations/types";
 import { levelLabel } from "../../lib/session";
 import { ErrorView } from "../ErrorPage";
+import { DatabaseTabs } from "./DatabaseTabs";
 import { MockBanner, StatusBadge, databaseName, formatDateTime, levelFor } from "./shared";
 
 const columns: Column<Migration>[] = [
@@ -66,6 +67,7 @@ export function MigrationListPage() {
                     ) : undefined
                 }
             />
+            <DatabaseTabs dbId={dbId} />
             <MockBanner />
             {migrations.isPending ? (
                 <Loading />
