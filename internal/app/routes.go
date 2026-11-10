@@ -3,6 +3,7 @@ package app
 import (
 	"net/http"
 
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/adminapi"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/sessionapi"
 )
 
@@ -42,5 +43,6 @@ func (a *App) routes() {
 	a.migrationRoutes()
 	a.schemaDiffRoutes()
 	(&sessionapi.Handler{Users: a.Users, Sessions: a.Sessions, Auth: a.Auth, Authz: a.Authz, Conns: a.Conns, Logger: a.Logger}).RegisterRoutes(a.mux, a.Auth.RequireLogin)
+	(&adminapi.Handler{Users: a.Users, Sessions: a.Sessions, Auth: a.Auth, Grants: a.Grants, GrantStore: a.GrantStore, Conns: a.Conns, Logger: a.Logger}).RegisterRoutes(a.mux, a.Auth.RequireAdmin)
 	a.mux.HandleFunc("/", a.notFound)
 }
