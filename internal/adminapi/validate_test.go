@@ -1,6 +1,7 @@
 package adminapi
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -84,6 +85,19 @@ func TestValidateAccess(t *testing.T) {
 		changes, details := validateAccess(items, known)
 		if changes != nil || details[key] == "" {
 			t.Fatalf("%s: got %v %v", key, changes, details)
+		}
+	}
+}
+
+func TestParseLeader(t *testing.T) {
+	cases := map[string]struct {
+		id int64
+		ok bool
+	}{"": {0, false}, "null": {0, true}, "5": {5, true}, "0": {0, false}, "-2": {0, false}, `"5"`: {0, false}, "1.5": {0, false}}
+	for raw, want := range cases {
+		id, ok := parseLeader(json.RawMessage(raw))
+		if id != want.id || ok != want.ok {
+			t.Fatalf("%q: got %d %v", raw, id, ok)
 		}
 	}
 }

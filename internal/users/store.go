@@ -14,6 +14,8 @@ var ErrNotFound = errors.New("data tidak ditemukan")
 
 var ErrDuplicate = errors.New("nama sudah dipakai")
 
+var ErrNotMember = errors.New("user bukan anggota grup")
+
 type User struct {
 	ID           int64
 	Username     string
@@ -29,6 +31,8 @@ type Group struct {
 	Description string
 	MemberCount int
 	CreatedAt   time.Time
+	LeaderID int64
+	LeaderName string
 }
 
 type Store struct {
@@ -138,7 +142,7 @@ func (s *Store) ListGroups(ctx context.Context) ([]Group, error) {
 
 func (s *Store) GetGroup(ctx context.Context, id int64) (*Group, error) {
 	g := &Group{}
-	err := s.db.QueryRow(ctx, "SELECT id, name, description, created_at FROM groups WHERE id = $1", id).Scan(&g.ID, &g.Name, &g.Description, &g.CreatedAt)
+	err := s.db.QueryRow(ctx, "SELECT g.id, g.name, g.description, g.created_at, COALESCE(g.leader_id, 0), COALESCE(u.username, '') FROM groups g LEFT JOIN users u ON u.id = g.leader_id WHERE g.id = $1", id).Scan(&g.ID, &g.Name, &g.Description, &g.CreatedAt, &g.LeaderID, &g.LeaderName)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -226,7 +230,7 @@ func (s *Store) ListGroupsPage(ctx context.Context, q string, limit, offset int)
 	if err := s.db.QueryRow(ctx, "SELECT count(*) FROM groups WHERE strpos(lower(name), lower($1)) > 0", q).Scan(&total); err != nil {
 		return nil, 0, err
 	}
-	rows, err := s.db.Query(ctx, "SELECT g.id, g.name, g.description, g.created_at, count(m.user_id) FROM groups g LEFT JOIN group_members m ON m.group_id = g.id WHERE strpos(lower(g.name), lower($1)) > 0 GROUP BY g.id ORDER BY g.name LIMIT $2 OFFSET $3", q, limit, offset)
+	rows, err := s.db.Query(ctx, "SELECT g.id, g.name, g.description, g.created_at, count(m.user_id), COALESCE(g.leader_id, 0), COALESCE(u.username, '') FROM groups g LEFT JOIN group_members m ON m.group_id = g.id LEFT JOIN users u ON u.id = g.leader_id WHERE strpos(lower(g.name), lower($1)) > 0 GROUP BY g.id, u.username ORDER BY g.name LIMIT $2 OFFSET $3", q, limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -234,7 +238,7 @@ func (s *Store) ListGroupsPage(ctx context.Context, q string, limit, offset int)
 	var list []Group
 	for rows.Next() {
 		var g Group
-		if err := rows.Scan(&g.ID, &g.Name, &g.Description, &g.CreatedAt, &g.MemberCount); err != nil {
+		if err := rows.Scan(&g.ID, &g.Name, &g.Description, &g.CreatedAt, &g.MemberCount, &g.LeaderID, &g.LeaderName); err != nil {
 			return nil, 0, err
 		}
 		list = append(list, g)
@@ -248,4 +252,33 @@ func (s *Store) DeleteMember(ctx context.Context, groupID, userID int64) (bool, 
 		return false, err
 	}
 	return tag.RowsAffected() > 0, nil
+}
+
+func (s *Store) SetLeader(ctx context.Context, groupID, userID int64) (int64, error) {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback(ctx)
+	var prev int64
+	err = tx.QueryRow(ctx, "SELECT COALESCE(leader_id, 0) FROM groups WHERE id = $1 FOR UPDATE", groupID).Scan(&prev)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	if err != nil {
+		return 0, err
+	}
+	var leader any
+	if userID != 0 {
+		leader = userID
+	}
+	_, err = tx.Exec(ctx, "UPDATE groups SET leader_id = $2 WHERE id = $1", groupID, leader)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+		return 0, ErrNotMember
+	}
+	if err != nil {
+		return 0, err
+	}
+	return prev, tx.Commit(ctx)
 }

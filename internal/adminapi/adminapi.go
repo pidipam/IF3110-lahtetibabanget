@@ -57,11 +57,17 @@ type UserDetail struct {
 	Groups []GroupRef `json:"groups"`
 }
 
+type UserRef struct {
+	ID int64 `json:"id"`
+	Username string `json:"username"`
+}
+
 type GroupDTO struct {
 	ID int64 `json:"id"`
 	Name string `json:"name"`
 	Description string `json:"description"`
 	MemberCount int `json:"member_count"`
+	Leader *UserRef `json:"leader"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
@@ -103,6 +109,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux, requireAdmin func(http.Hand
 	handle("DELETE /api/admin/groups/{id}/members/{userID}", h.removeMember)
 	handle("GET /api/admin/groups/{id}/access", h.getAccess)
 	handle("PUT /api/admin/groups/{id}/access", h.putAccess)
+	handle("PUT /api/admin/groups/{id}/leader", h.putLeader)
 }
 
 func toUserDTO(u users.User) UserDTO {
@@ -110,7 +117,11 @@ func toUserDTO(u users.User) UserDTO {
 }
 
 func toGroupDTO(g users.Group) GroupDTO {
-	return GroupDTO{ID: g.ID, Name: g.Name, Description: g.Description, MemberCount: g.MemberCount, CreatedAt: g.CreatedAt.UTC()}
+	out := GroupDTO{ID: g.ID, Name: g.Name, Description: g.Description, MemberCount: g.MemberCount, CreatedAt: g.CreatedAt.UTC()}
+	if g.LeaderID != 0 {
+		out.Leader = &UserRef{ID: g.LeaderID, Username: g.LeaderName}
+	}
+	return out
 }
 
 func toUserDTOs(list []users.User) []UserDTO {

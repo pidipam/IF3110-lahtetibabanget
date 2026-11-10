@@ -19,11 +19,17 @@ export type AdminUserDetail = AdminUser & {
     groups: GroupRef[];
 };
 
+export type GroupRefUser = {
+    id: number;
+    username: string;
+};
+
 export type AdminGroup = {
     id: number;
     name: string;
     description: string;
     member_count: number;
+    leader: GroupRefUser | null;
     created_at: string;
 };
 

@@ -2,6 +2,7 @@ package adminapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -34,6 +35,10 @@ type accessItem struct {
 
 type accessRequest struct {
 	Access []accessItem `json:"access"`
+}
+
+type leaderRequest struct {
+	UserID json.RawMessage `json:"user_id"`
 }
 
 type accessChange struct {
@@ -364,4 +369,83 @@ func (h *Handler) putAccess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, map[string][]AccessDTO{"items": access})
+}
+
+func parseLeader(raw json.RawMessage) (int64, bool) {
+	if len(raw) == 0 {
+		return 0, false
+	}
+	if string(raw) == "null" {
+		return 0, true
+	}
+	var id int64
+	if err := json.Unmarshal(raw, &id); err != nil || id <= 0 {
+		return 0, false
+	}
+	return id, true
+}
+
+func (h *Handler) putLeader(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	g, ok := h.loadGroup(w, r)
+	if !ok {
+		return
+	}
+	var in leaderRequest
+	if err := httpapi.DecodeJSON(w, r, &in); err != nil {
+		httpapi.Invalid(w, msgBadBody, nil)
+		return
+	}
+	userID, ok := parseLeader(in.UserID)
+	if !ok {
+		httpapi.Invalid(w, "Leader tidak valid.", map[string]string{"user_id": "Isi id user, atau null untuk melepas leader."})
+		return
+	}
+	if userID != 0 {
+		u, err := h.Users.GetByID(ctx, userID)
+		if errors.Is(err, users.ErrNotFound) {
+			httpapi.Invalid(w, "Leader tidak valid.", map[string]string{"user_id": "User tidak ditemukan."})
+			return
+		}
+		if err != nil {
+			h.fail(w, r, err)
+			return
+		}
+		if !u.IsActive {
+			httpapi.Invalid(w, "Leader tidak valid.", map[string]string{"user_id": "User nonaktif tidak bisa menjadi leader."})
+			return
+		}
+	}
+	prev, err := h.Users.SetLeader(ctx, g.ID, userID)
+	if errors.Is(err, users.ErrNotMember) {
+		httpapi.Invalid(w, "Leader tidak valid.", map[string]string{"user_id": "User harus menjadi anggota Grup terlebih dahulu."})
+		return
+	}
+	if errors.Is(err, users.ErrNotFound) {
+		httpapi.NotFound(w)
+		return
+	}
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if prev != userID {
+		if prev != 0 {
+			err = h.Sessions.RevokeUser(ctx, prev)
+		}
+		if err == nil && userID != 0 {
+			err = h.Sessions.MarkRotateUser(ctx, userID)
+		}
+		if err != nil {
+			h.fail(w, r, err)
+			return
+		}
+	}
+	h.Logger.Info("admin set group leader", "admin_id", actorID(r), "group_id", g.ID, "leader_id", userID, "previous_leader_id", prev)
+	updated, err := h.Users.GetGroup(ctx, g.ID)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	h.writeGroupDetail(w, r, updated)
 }
