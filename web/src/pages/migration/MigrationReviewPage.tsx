@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import { Badge } from "../../components/Badge";
 import { Button } from "../../components/Button";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -49,7 +49,7 @@ function Review({ migration: m, canChange }: { migration: Migration; canChange: 
     const execute = useExecuteMigration(m.id, m.database_id);
     const required = useRequiredApprovers(canChange && canSubmit(m.status) ? m.database_id : undefined);
     const [dialog, setDialog] = useState<"submit" | "execute" | null>(null);
-    const [jobId, setJobId] = useState<string | null>(null);
+    const navigate = useNavigate();
     const dbName = databaseName(me, m.database_id);
 
     const onSubmit = () => {
@@ -62,8 +62,8 @@ function Review({ migration: m, canChange }: { migration: Migration; canChange: 
     const onExecute = () => {
         execute.mutate(undefined, {
             onSuccess: (res) => {
-                setJobId(res.job_id);
                 toast.success(res.message || "Migration masuk antrean.");
+                navigate(`/migration/job/${res.job_id}`);
             },
             onSettled: () => setDialog(null),
         });
@@ -98,11 +98,6 @@ function Review({ migration: m, canChange }: { migration: Migration; canChange: 
             <MockBanner />
             {!canChange && <p className="text-sm text-slate-600">Anda hanya punya akses View Only, jadi hanya bisa melihat migration ini.</p>}
             {canChange && m.status === "Pending Review" && <p className="text-sm text-slate-600">Tombol Jalankan muncul setelah semua leader Grup menyetujui.</p>}
-            {jobId && (
-                <p role="status" className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-900 ring-1 ring-inset ring-emerald-200">
-                    Migration masuk antrean dengan job <span className="break-all font-mono">{jobId}</span>.
-                </p>
-            )}
 
             <Section title="SQL">
                 <div className="grid gap-4 lg:grid-cols-2">

@@ -17,6 +17,7 @@ import { UsersPage } from "./pages/admin/UsersPage";
 import { DatabasePickerPage } from "./pages/migration/DatabasePickerPage";
 import { ExecutionDetailPage } from "./pages/migration/ExecutionDetailPage";
 import { HistoryPage } from "./pages/migration/HistoryPage";
+import { JobMonitorPage } from "./pages/migration/JobMonitorPage";
 import { MigrationEditPage, MigrationNewPage } from "./pages/migration/MigrationEditorPage";
 import { MigrationListPage } from "./pages/migration/MigrationListPage";
 import { MigrationReviewPage } from "./pages/migration/MigrationReviewPage";
@@ -65,6 +66,7 @@ export const router = createBrowserRouter(
                         { path: "/migration/database/:dbId/baru", element: <MigrationNewPage /> },
                         { path: "/migration/database/:dbId/riwayat", element: <HistoryPage /> },
                         { path: "/migration/database/:dbId/riwayat/:executionId", element: <ExecutionDetailPage /> },
+                        { path: "/migration/job/:jobId", element: <JobMonitorPage /> },
                         { path: "/migration/:id", element: <MigrationReviewPage /> },
                         { path: "/migration/:id/ubah", element: <MigrationEditPage /> },
                         {
