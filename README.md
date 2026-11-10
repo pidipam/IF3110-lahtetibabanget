@@ -5,8 +5,7 @@ Tugas Besar IF3110 Pengembangan Aplikasi Web 2026
 
 Platform web untuk mengelola akses dan perubahan schema database bersama (PostgreSQL, dengan
 dukungan tambahan MySQL/MariaDB): akses diatur per grup, struktur dan data dapat dijelajahi, dan
-setiap perubahan dilakukan lewat migration yang tercatat. Tugas Besar IF3110 Pengembangan Aplikasi
-Web 2026, Milestone 1.
+setiap perubahan dilakukan lewat migration yang tercatat.
 
 ## Fitur
 
