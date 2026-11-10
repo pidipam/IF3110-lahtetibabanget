@@ -80,6 +80,32 @@ API sesi:
 401 memakai kode `unauthenticated` (belum login) atau `session_expired` (sesi berakhir atau dicabut).
 Token CSRF yang salah menghasilkan 403 `csrf_invalid`.
 
+API admin (hanya admin; non-admin 403 `forbidden`):
+
+| Endpoint | Keterangan |
+|---|---|
+| `GET /api/admin/users` | Daftar user. Query `page`, `page_size` (default 20, maks 100), `q` (cari username). |
+| `POST /api/admin/users` | Body `{"username","password","is_admin"}`, 201. |
+| `GET /api/admin/users/{id}` | Detail user beserta grupnya. |
+| `PATCH /api/admin/users/{id}` | Field opsional `username`, `is_admin`, `is_active`. |
+| `POST /api/admin/users/{id}/password` | Body `{"password"}`, 204. Semua sesi user dicabut. |
+| `GET /api/admin/groups` | Daftar grup dengan `member_count`. Query sama dengan daftar user (`q` mencari nama). |
+| `POST /api/admin/groups` | Body `{"name","description"}`, 201. |
+| `GET /api/admin/groups/{id}` | Detail grup, `members`, dan `access`. |
+| `PATCH /api/admin/groups/{id}` | Field opsional `name`, `description`. |
+| `DELETE /api/admin/groups/{id}` | 204. Sesi semua anggota dicabut. |
+| `GET /api/admin/groups/{id}/candidates` | User aktif yang belum menjadi anggota. |
+| `POST /api/admin/groups/{id}/members` | Body `{"user_id"}`, 204. |
+| `DELETE /api/admin/groups/{id}/members/{userID}` | 204, atau 404 bila bukan anggota. |
+| `GET /api/admin/groups/{id}/access` | Semua database beserta level grup (`none`, `view`, `edit`). |
+| `PUT /api/admin/groups/{id}/access` | Body `{"access":[{"db_id","level"}]}`. Semua item divalidasi sebelum ada yang diubah. |
+
+Daftar berpaginasi berbentuk `{"items":[...],"page":1,"page_size":20,"total":57}`.
+Hak yang turun (nonaktif, admin dicabut, reset password, keluar grup, akses turun atau dicabut,
+grup dihapus) langsung mencabut sesi user terkait. Hak yang naik (jadi admin, masuk grup, akses naik)
+membuat sesi dirotasi pada request berikutnya. Admin tidak bisa mencabut hak admin atau menonaktifkan
+dirinya sendiri (422 `self_lockout`). Username atau nama grup yang sudah dipakai menghasilkan 409 `conflict`.
+
 ### Konfigurasi (environment)
 
 | Variabel | Default | Keterangan |
