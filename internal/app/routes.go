@@ -1,6 +1,10 @@
 package app
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/sessionapi"
+)
 
 func (a *App) routes() {
 	login := func(h http.HandlerFunc) http.Handler { return a.Auth.RequireLogin(h) }
@@ -37,5 +41,6 @@ func (a *App) routes() {
 	a.mux.Handle("GET /databases/{id}/tables/{schema}/{table}", login(a.databaseTable))
 	a.migrationRoutes()
 	a.schemaDiffRoutes()
+	(&sessionapi.Handler{Users: a.Users, Sessions: a.Sessions, Auth: a.Auth, Authz: a.Authz, Conns: a.Conns, Logger: a.Logger}).RegisterRoutes(a.mux, a.Auth.RequireLogin)
 	a.mux.HandleFunc("/", a.notFound)
 }
