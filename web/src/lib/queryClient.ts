@@ -6,7 +6,7 @@ import { toast } from "./toast";
 declare module "@tanstack/react-query" {
     interface Register {
         queryMeta: { skipGlobalError?: boolean };
-        mutationMeta: { skipGlobalError?: boolean };
+        mutationMeta: { skipGlobalError?: boolean; inlineStatuses?: number[] };
     }
 }
 
@@ -36,8 +36,8 @@ export function routeForError(err: unknown): string | null {
 type Navigate = (to: string, opts: { replace: boolean; state?: unknown }) => void;
 
 export function createQueryClient(navigate: Navigate, currentPath: () => string) {
-    const handle = (err: unknown, kind: "query" | "mutation", skip?: boolean) => {
-        if (skip) {
+    const handle = (err: unknown, kind: "query" | "mutation", skip?: boolean, inline?: number[]) => {
+        if (skip || (inline && isApiError(err) && inline.includes(err.status))) {
             return;
         }
         const target = routeForError(err);
@@ -56,7 +56,7 @@ export function createQueryClient(navigate: Navigate, currentPath: () => string)
     };
     const client: QueryClient = new QueryClient({
         queryCache: new QueryCache({ onError: (err, query) => handle(err, "query", query.meta?.skipGlobalError) }),
-        mutationCache: new MutationCache({ onError: (err, _vars, _ctx, mutation) => handle(err, "mutation", mutation.meta?.skipGlobalError) }),
+        mutationCache: new MutationCache({ onError: (err, _vars, _ctx, mutation) => handle(err, "mutation", mutation.meta?.skipGlobalError, mutation.meta?.inlineStatuses) }),
         defaultOptions: {
             queries: {
                 retry: (count, err) => count < 2 && isApiError(err) && (err.status === 0 || (err.status >= 500 && err.status !== 503)),

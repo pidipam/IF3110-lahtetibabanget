@@ -71,3 +71,27 @@ export function fieldErrors(details: unknown): Record<string, string> {
     }
     return {};
 }
+
+type CheckboxProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type"> & {
+    label: string;
+    hint?: string;
+};
+
+export function Checkbox({ label, hint, className = "", ...rest }: CheckboxProps) {
+    const id = useId();
+    return (
+        <div className={`flex gap-3 ${className}`}>
+            <input id={id} type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 rounded border-slate-300 accent-indigo-600 disabled:cursor-not-allowed" aria-describedby={hint ? `${id}-hint` : undefined} {...rest} />
+            <div className="min-w-0">
+                <label htmlFor={id} className={`text-sm font-medium ${rest.disabled ? "text-slate-500" : "text-slate-800"}`}>
+                    {label}
+                </label>
+                {hint && (
+                    <p id={`${id}-hint`} className="text-xs text-slate-500">
+                        {hint}
+                    </p>
+                )}
+            </div>
+        </div>
+    );
+}
