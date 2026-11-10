@@ -260,3 +260,41 @@ func TestAPIRejectRequiresReason(t *testing.T) {
 		t.Fatal("keputusan harus tercatat tanpa rahasia")
 	}
 }
+
+func TestAPIRequiredApprovers(t *testing.T) {
+	e := setup(t)
+	dev := e.createUser("dev", "password123", false)
+	a := e.createUser("ani", "password123", false)
+	e.createUser("luar", "password123", false)
+	e.createUser("admin", "password123", true)
+	conn := testutil.SeedConnection(t, e.db)
+	other := testutil.SeedConnection(t, e.db)
+	g1 := testutil.SeedGroup(t, e.db, "analis")
+	g2 := testutil.SeedGroup(t, e.db, "ops")
+	testutil.SeedMember(t, e.db, g1, dev.ID)
+	testutil.SeedMember(t, e.db, g1, a.ID)
+	testutil.SeedGrant(t, e.db, g1, conn.ID, authz.LevelEdit)
+	testutil.SeedGrant(t, e.db, g2, conn.ID, authz.LevelView)
+	e.setLeader(g1, a.ID)
+	devc := e.apiLogin("dev", "password123")
+	path := fmt.Sprintf("/api/databases/%d/approvers", conn.ID)
+
+	w := devc.send("GET", path, "", "")
+	expectStatus(t, w, http.StatusOK)
+	var out approvalapi.RequiredApproversDTO
+	decodeBody(t, w, &out)
+	if out.Ready || !strings.Contains(out.Message, "Grup ops belum punya leader aktif") || len(out.Groups) != 2 || out.Groups[0].Leader == nil || out.Groups[0].Leader.Username != "ani" || out.Groups[1].Leader != nil {
+		t.Fatalf("approver wajib salah: %+v", out)
+	}
+	testutil.SeedMember(t, e.db, g2, dev.ID)
+	e.setLeader(g2, dev.ID)
+	decodeBody(t, devc.send("GET", path, "", ""), &out)
+	if !out.Ready || out.Groups[1].Leader == nil {
+		t.Fatalf("semua grup punya leader: %+v", out)
+	}
+	expectAPIError(t, devc.send("GET", fmt.Sprintf("/api/databases/%d/approvers", other.ID), "", ""), http.StatusForbidden, "forbidden")
+	expectAPIError(t, e.apiLogin("luar", "password123").send("GET", path, "", ""), http.StatusForbidden, "forbidden")
+	expectAPIError(t, e.apiLogin("admin", "password123").send("GET", path, "", ""), http.StatusForbidden, "forbidden")
+	expectAPIError(t, devc.send("GET", "/api/databases/abc/approvers", "", ""), http.StatusNotFound, "not_found")
+	expectAPIError(t, e.api().send("GET", path, "", ""), http.StatusUnauthorized, "unauthenticated")
+}

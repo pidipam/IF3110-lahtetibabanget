@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/approval"
@@ -56,6 +57,20 @@ type ApprovalDTO struct {
 	CanDecide bool `json:"can_decide"`
 }
 
+type RequiredGroupDTO struct {
+	GroupID int64 `json:"group_id"`
+	GroupName string `json:"group_name"`
+	Level string `json:"level"`
+	Leader *UserRef `json:"leader"`
+}
+
+type RequiredApproversDTO struct {
+	DatabaseID int64 `json:"database_id"`
+	Ready bool `json:"ready"`
+	Message string `json:"message"`
+	Groups []RequiredGroupDTO `json:"groups"`
+}
+
 type decisionRequest struct {
 	RevisionNumber int `json:"revision_number"`
 	Reason string `json:"reason"`
@@ -63,6 +78,7 @@ type decisionRequest struct {
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux, requireLogin func(http.Handler) http.Handler) {
 	mux.Handle("GET /api/approvals", requireLogin(http.HandlerFunc(h.list)))
+	mux.Handle("GET /api/databases/{id}/approvers", requireLogin(http.HandlerFunc(h.required)))
 	mux.Handle("GET /api/migrations/{id}/approvals", requireLogin(http.HandlerFunc(h.status)))
 	mux.Handle("POST /api/migrations/{id}/approve", requireLogin(http.HandlerFunc(h.approve)))
 	mux.Handle("POST /api/migrations/{id}/reject", requireLogin(http.HandlerFunc(h.reject)))
@@ -142,6 +158,49 @@ func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, toDTO(st, pr.UserID))
+}
+
+func requiredDTO(dbID int64, groups []approval.Group) RequiredApproversDTO {
+	out := RequiredApproversDTO{DatabaseID: dbID, Ready: true, Groups: make([]RequiredGroupDTO, 0, len(groups))}
+	var missing []string
+	for _, g := range groups {
+		dto := RequiredGroupDTO{GroupID: g.ID, GroupName: g.Name, Level: g.Level.String()}
+		if g.HasLeader() {
+			dto.Leader = &UserRef{ID: g.LeaderID, Username: g.LeaderName}
+		} else {
+			missing = append(missing, g.Name)
+		}
+		out.Groups = append(out.Groups, dto)
+	}
+	switch {
+	case len(groups) == 0:
+		out.Ready = false
+		out.Message = "Belum ada Grup yang punya akses ke database ini, jadi tidak ada yang bisa menyetujui."
+	case len(missing) > 0:
+		out.Ready = false
+		out.Message = "Grup " + strings.Join(missing, ", ") + " belum punya leader aktif. Minta admin menetapkan leader."
+	default:
+		out.Message = "Semua Grup wajib sudah punya leader."
+	}
+	return out
+}
+
+func (h *Handler) required(w http.ResponseWriter, r *http.Request) {
+	dbID, ok := httpapi.PathID(r, "id")
+	if !ok {
+		httpapi.NotFound(w)
+		return
+	}
+	if err := h.Authz.Can(r.Context(), principal(r), dbID, authz.ViewMigration); err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	groups, err := h.Approvals.RequiredApprovers(r.Context(), dbID)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, requiredDTO(dbID, groups))
 }
 
 func (h *Handler) approve(w http.ResponseWriter, r *http.Request) {
