@@ -135,6 +135,7 @@ dirinya sendiri (422 `self_lockout`). Username atau nama grup yang sudah dipakai
 | `/app/migration/{id}/ubah` | Ubah migration (membuat revisi baru) |
 | `/app/migration/database/{id}/riwayat` | Riwayat eksekusi. Checkbox Hide rollback disimpan di URL (`?hide_rollback=1`) |
 | `/app/migration/database/{id}/riwayat/{executionId}` | Detail eksekusi dan SQL yang benar-benar dijalankan |
+| `/app/migration/job/{jobId}` | Monitor job: polling berkala, progres batch dan row, aksi sesuai `allowed_actions` |
 
 API migration belum tersedia, jadi SPA memakai data contoh sesuai `internal/migration/dto.go`. Halaman
 menampilkan banner "Data contoh" selama mode ini aktif. Untuk memakai API sungguhan, build dengan
@@ -145,6 +146,19 @@ Riwayat mengharapkan `GET /api/databases/{id}/history?hide_rollback=true|false&p
 mengembalikan `HistoryItemResponse` (array, atau `{items, page, page_size, total}`), dan
 `GET /api/databases/{id}/history/{executionId}` untuk detail. `hide_rollback=true` menyembunyikan rollback
 beserta eksekusi yang dibatalkannya.
+
+Monitor job memakai kontrak usulan berikut (perlu disepakati dengan pemilik antrean, worker, dan model eksekusi):
+
+- `GET /api/jobs/{id}` mengembalikan `job_id`, `execution_id`, `migration_id`, `database_id`, `title`,
+  `kind` (`up`, `rollback`, `forward`), `status` (`queued`, `running`, `success`, `failed`, `partial`,
+  `uncertain`, `partially_reverted`, `cancelled`), `attempt`, `is_batch_mode`, `batches_committed`,
+  `batches_total` (boleh null), `rows_committed`, `rows_total` (boleh null), `error_message`, `queued_at`,
+  `started_at`, `finished_at`, `updated_at`, dan `allowed_actions` (isinya `rollback`, `forward`, `retry`,
+  `resume`, `cancel`).
+- `POST /api/jobs/{id}/{aksi}` mengembalikan `{"message", "migration_id", "needs_approval", "job_id"?}`.
+  SPA hanya menampilkan tombol yang ada di `allowed_actions`.
+- Polling tiap 2 detik saat `queued` atau `running`, tiap 10 detik saat `partial`, `uncertain`, atau
+  `partially_reverted`, dan berhenti di status akhir. Polling berhenti saat tab tidak aktif.
 
 ### Persetujuan migration
 
