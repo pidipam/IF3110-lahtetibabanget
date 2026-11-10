@@ -124,6 +124,28 @@ grup dihapus) langsung mencabut sesi user terkait. Hak yang naik (jadi admin, ma
 membuat sesi dirotasi pada request berikutnya. Admin tidak bisa mencabut hak admin atau menonaktifkan
 dirinya sendiri (422 `self_lockout`). Username atau nama grup yang sudah dipakai menghasilkan 409 `conflict`.
 
+### Halaman migration SPA (tahap 1)
+
+| Halaman | Isi |
+|---|---|
+| `/app/migration` | Pilih database (langsung masuk bila hanya punya satu) |
+| `/app/migration/database/{id}` | Daftar migration database |
+| `/app/migration/database/{id}/baru` | Editor: judul, SQL up, SQL down, irreversible dengan alasan, mode normal atau batch |
+| `/app/migration/{id}` | Review: SQL up dan down, approver dan statusnya, tombol Ajukan review dan Jalankan |
+| `/app/migration/{id}/ubah` | Ubah migration (membuat revisi baru) |
+| `/app/migration/database/{id}/riwayat` | Riwayat eksekusi. Checkbox Hide rollback disimpan di URL (`?hide_rollback=1`) |
+| `/app/migration/database/{id}/riwayat/{executionId}` | Detail eksekusi dan SQL yang benar-benar dijalankan |
+
+API migration belum tersedia, jadi SPA memakai data contoh sesuai `internal/migration/dto.go`. Halaman
+menampilkan banner "Data contoh" selama mode ini aktif. Untuk memakai API sungguhan, build dengan
+`VITE_MIGRATION_API=http`. Path endpoint yang dipakai ada di `web/src/lib/migrations/client.ts`.
+Daftar approver selalu memakai API sungguhan `GET /api/databases/{id}/approvers`.
+
+Riwayat mengharapkan `GET /api/databases/{id}/history?hide_rollback=true|false&page=&page_size=` yang
+mengembalikan `HistoryItemResponse` (array, atau `{items, page, page_size, total}`), dan
+`GET /api/databases/{id}/history/{executionId}` untuk detail. `hide_rollback=true` menyembunyikan rollback
+beserta eksekusi yang dibatalkannya.
+
 ### Persetujuan migration
 
 Setiap eksekusi migration (`up`, `rollback`, `forward`) yang berstatus `pending_review` harus disetujui
@@ -137,6 +159,7 @@ leader setiap Grup yang punya akses `view` atau `edit` ke database tujuan. Atura
 
 | Endpoint | Keterangan |
 |---|---|
+| `GET /api/databases/{id}/approvers` | Grup wajib beserta leader-nya, dan `ready=false` bila ada Grup tanpa leader. Butuh akses view. |
 | `GET /api/approvals?mine=true` | Permintaan yang menunggu keputusan Grup yang saya pimpin. Tanpa `mine`: semua permintaan `pending_review` di database yang bisa saya lihat. |
 | `GET /api/migrations/{id}/approvals` | Status persetujuan eksekusi terakhir migration (butuh akses view). |
 | `POST /api/migrations/{id}/approve` | Body `{"revision_number"}`. 403 bila bukan leader Grup wajib atau pengaju sendiri, 409 bila revisi berubah atau sudah diputuskan. |
