@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router";
+import { Badge } from "../../components/Badge";
 import { Button } from "../../components/Button";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { Field, Select } from "../../components/Form";
@@ -31,7 +32,7 @@ export function GroupMembers({ group }: { group: AdminGroupDetail }) {
             onSuccess: () => {
                 const u = candidates.data?.find((c) => c.id === userID);
                 setSelected("");
-                toast.success(`${u?.username ?? "User"} ditambahkan ke Grup.`);
+                toast.success(`${u?.username ?? "User"} ditambahkan ke grup.`);
             },
             onError: (err) => {
                 if (isInlineError(err) && isApiError(err)) {
@@ -46,7 +47,7 @@ export function GroupMembers({ group }: { group: AdminGroupDetail }) {
             return;
         }
         remove.mutate(target.id, {
-            onSuccess: () => toast.success(`${target.username} dikeluarkan dari Grup.`),
+            onSuccess: () => toast.success(`${target.username} dikeluarkan dari grup.`),
             onSettled: () => setTarget(null),
         });
     };
@@ -54,7 +55,7 @@ export function GroupMembers({ group }: { group: AdminGroupDetail }) {
     const options = candidates.data ?? [];
 
     return (
-        <Section title="Anggota" description={`${group.members.length} anggota. Akses database Grup berlaku untuk semua anggota.`}>
+        <Section title="Anggota">
             <form onSubmit={onAdd} noValidate className="flex flex-col gap-2 sm:flex-row sm:items-end">
                 <div className="min-w-0 flex-1">
                     <Field label="Tambah anggota" error={error} hint={candidates.isSuccess && options.length === 0 ? "Semua user aktif sudah menjadi anggota." : undefined}>
@@ -88,8 +89,9 @@ export function GroupMembers({ group }: { group: AdminGroupDetail }) {
                                 </Link>
                                 {u.id === me.user.id && <span className="text-sm text-slate-500">(Anda)</span>}
                                 <UserBadges user={u} />
+                                {group.leader?.id === u.id && <Badge tone="info">Leader</Badge>}
                             </div>
-                            <Button variant="ghost" className="text-red-700" onClick={() => setTarget(u)} aria-label={`Keluarkan ${u.username}`}>
+                            <Button variant="danger" onClick={() => setTarget(u)} aria-label={`Keluarkan ${u.username}`}>
                                 Keluarkan
                             </Button>
                         </li>
@@ -99,7 +101,7 @@ export function GroupMembers({ group }: { group: AdminGroupDetail }) {
 
             <ConfirmDialog open={target !== null} title="Keluarkan anggota?" confirmLabel="Ya, keluarkan" danger loading={remove.isPending} onConfirm={onRemove} onClose={() => setTarget(null)}>
                 <p>
-                    <strong>{target?.username}</strong> akan dikeluarkan dari Grup {group.name}.
+                    <strong>{target?.username}</strong> akan dikeluarkan dari grup {group.name}.
                 </p>
                 <p>{target?.id === me.user.id ? "Ini akun Anda sendiri. Anda akan keluar dan harus login lagi." : "Semua sesi aktif user ini akan langsung diakhiri."}</p>
             </ConfirmDialog>

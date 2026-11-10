@@ -177,6 +177,10 @@ export function useRemoveMember(id: number) {
     return useGroupMutation((userID: number) => api.delete<void>(`/api/admin/groups/${id}/members/${userID}`));
 }
 
+export function useSetLeader(id: number) {
+    return useGroupMutation((userID: number | null) => api.put<AdminGroupDetail>(`/api/admin/groups/${id}/leader`, { user_id: userID }), true);
+}
+
 export function useSetAccess(id: number) {
     return useGroupMutation((access: { db_id: number; level: GrantLevel }[]) => api.put<{ items: GroupAccess[] }>(`/api/admin/groups/${id}/access`, { access }), true);
 }

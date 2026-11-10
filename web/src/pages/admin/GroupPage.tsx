@@ -11,6 +11,7 @@ import { useCurrentUser } from "../../lib/currentUser";
 import { toast } from "../../lib/toast";
 import { ErrorView } from "../ErrorPage";
 import { GroupAccess } from "./GroupAccess";
+import { GroupLeader } from "./GroupLeader";
 import { GroupMembers } from "./GroupMembers";
 import { checkGroup } from "./GroupNewPage";
 import { parseId } from "./UserEditPage";
@@ -35,9 +36,10 @@ function GroupDetail({ id }: { id: number }) {
     const g = group.data;
     return (
         <div className="mx-auto max-w-3xl space-y-6">
-            <PageHeader title={g.name} description={g.description || "Tanpa deskripsi"} back={{ to: "/admin/grup", label: "Daftar Grup" }} />
+            <PageHeader title={g.name} description={g.description || "Tanpa deskripsi"} back={{ to: "/admin/grup", label: "Daftar grup" }} />
             <GroupForm key={`${g.id}-${g.name}-${g.description}`} group={g} />
             <GroupMembers group={g} />
+            <GroupLeader key={`${g.leader?.id ?? 0}-${g.members.map((m) => m.id).join(",")}`} group={g} />
             <GroupAccess key={g.access.map((a) => `${a.db_id}:${a.level}`).join(",")} group={g} />
             <DeleteGroup group={g} />
         </div>
@@ -63,7 +65,7 @@ function GroupForm({ group }: { group: AdminGroupDetail }) {
         update.mutate(
             { name: name.trim(), description: description.trim() },
             {
-                onSuccess: () => toast.success("Perubahan Grup disimpan."),
+                onSuccess: () => toast.success("Perubahan grup disimpan."),
                 onError: (err) => {
                     if (isInlineError(err) && isApiError(err)) {
                         const fields = fieldErrors(err.details);
@@ -76,14 +78,14 @@ function GroupForm({ group }: { group: AdminGroupDetail }) {
     };
 
     return (
-        <Section title="Ubah Grup">
+        <Section title="Ubah grup">
             <form onSubmit={onSubmit} noValidate className="space-y-4">
                 <FormError message={formError} />
-                <Field label="Nama" error={errors.name} hint="Maksimal 64 karakter.">
-                    {(p) => <Input {...p} name="name" autoComplete="off" value={name} onChange={(e) => setName(e.target.value)} />}
+                <Field label="Nama" error={errors.name || (name ? checkGroup(name, "").name : undefined)}>
+                    {(p) => <Input {...p} name="name" autoComplete="off" value={name} onChange={(e) => { setName(e.target.value); setErrors((x) => ({ ...x, name: "" })); }} />}
                 </Field>
-                <Field label="Deskripsi" error={errors.description} hint="Opsional, maksimal 500 karakter.">
-                    {(p) => <Textarea {...p} name="description" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />}
+                <Field label="Deskripsi" error={errors.description || checkGroup("x", description).description}>
+                    {(p) => <Textarea {...p} name="description" rows={3} value={description} onChange={(e) => { setDescription(e.target.value); setErrors((x) => ({ ...x, description: "" })); }} />}
                 </Field>
                 <div className="flex justify-end">
                     <Button type="submit" loading={update.isPending} disabled={!dirty}>
@@ -112,18 +114,18 @@ function DeleteGroup({ group }: { group: AdminGroupDetail }) {
     };
 
     return (
-        <Section title="Hapus Grup" description="Anggota kehilangan akses database dari Grup ini dan sesi mereka diakhiri." danger>
+        <Section title="Hapus grup" description="Anggota kehilangan akses database dari grup ini dan sesinya diakhiri." danger>
             <div className="flex justify-end">
                 <Button variant="danger" onClick={() => setConfirm(true)}>
-                    Hapus Grup
+                    Hapus grup
                 </Button>
             </div>
-            <ConfirmDialog open={confirm} title="Hapus Grup?" confirmLabel="Ya, hapus" danger loading={remove.isPending} onConfirm={onConfirm} onClose={() => setConfirm(false)}>
+            <ConfirmDialog open={confirm} title="Hapus grup?" confirmLabel="Ya, hapus" danger loading={remove.isPending} onConfirm={onConfirm} onClose={() => setConfirm(false)}>
                 <p>
                     Grup <strong>{group.name}</strong> akan dihapus permanen.
                 </p>
                 <p>{group.member_count > 0 ? `Sesi ${group.member_count} anggota akan langsung diakhiri.` : "Grup ini belum punya anggota."}</p>
-                {group.members.some((m) => m.id === me.user.id) && <p>Anda termasuk anggota, jadi Anda juga harus login lagi.</p>}
+                {group.members.some((m) => m.id === me.user.id) && <p>Anda termasuk anggota sehingga Anda juga harus login lagi.</p>}
             </ConfirmDialog>
         </Section>
     );
