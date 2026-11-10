@@ -211,3 +211,41 @@ func (s *Store) GroupsOfUser(ctx context.Context, userID int64) ([]Group, error)
 	}
 	return list, rows.Err()
 }
+
+func (s *Store) ListPage(ctx context.Context, q string, limit, offset int) ([]User, int, error) {
+	var total int
+	if err := s.db.QueryRow(ctx, "SELECT count(*) FROM users WHERE strpos(username, $1) > 0", q).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	list, err := scanUsers(s.db.Query(ctx, "SELECT "+userColumns+" FROM users WHERE strpos(username, $1) > 0 ORDER BY username LIMIT $2 OFFSET $3", q, limit, offset))
+	return list, total, err
+}
+
+func (s *Store) ListGroupsPage(ctx context.Context, q string, limit, offset int) ([]Group, int, error) {
+	var total int
+	if err := s.db.QueryRow(ctx, "SELECT count(*) FROM groups WHERE strpos(lower(name), lower($1)) > 0", q).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	rows, err := s.db.Query(ctx, "SELECT g.id, g.name, g.description, g.created_at, count(m.user_id) FROM groups g LEFT JOIN group_members m ON m.group_id = g.id WHERE strpos(lower(g.name), lower($1)) > 0 GROUP BY g.id ORDER BY g.name LIMIT $2 OFFSET $3", q, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	var list []Group
+	for rows.Next() {
+		var g Group
+		if err := rows.Scan(&g.ID, &g.Name, &g.Description, &g.CreatedAt, &g.MemberCount); err != nil {
+			return nil, 0, err
+		}
+		list = append(list, g)
+	}
+	return list, total, rows.Err()
+}
+
+func (s *Store) DeleteMember(ctx context.Context, groupID, userID int64) (bool, error) {
+	tag, err := s.db.Exec(ctx, "DELETE FROM group_members WHERE group_id = $1 AND user_id = $2", groupID, userID)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
+}
