@@ -3,7 +3,7 @@ import { isApiError } from "../api";
 import type { MigrationClient } from "./client";
 import { httpClient } from "./httpClient";
 import { mockClient } from "./mockClient";
-import type { HistoryQuery, Migration, MigrationInput } from "./types";
+import { pollInterval, type HistoryQuery, type JobAction, type Migration, type MigrationInput } from "./types";
 
 export const migrationClient: MigrationClient = import.meta.env.VITE_MIGRATION_API === "http" ? httpClient : mockClient;
 
@@ -21,6 +21,40 @@ export const migrationKeys = {
 };
 
 export const historyPageSize = 20;
+
+export const jobKey = (id: string) => ["jobs", id] as const;
+
+export function useJob(id: string) {
+    return useQuery({
+        queryKey: jobKey(id),
+        queryFn: () => migrationClient.job(id),
+        refetchOnWindowFocus: true,
+        refetchIntervalInBackground: false,
+        refetchInterval: (q) => {
+            const err = q.state.error;
+            if (err) {
+                if (isApiError(err) && err.status >= 400 && err.status < 500) {
+                    return false;
+                }
+                return Math.min(30000, 2000 * 2 ** Math.min(q.state.fetchFailureCount, 4));
+            }
+            return q.state.data ? pollInterval(q.state.data.status) : false;
+        },
+    });
+}
+
+export function useJobAction(id: string) {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (action: JobAction) => migrationClient.jobAction(id, action),
+        meta: { inlineStatuses: [409] },
+        onSettled: () => qc.invalidateQueries({ queryKey: jobKey(id) }),
+        onSuccess: (res) => {
+            qc.invalidateQueries({ queryKey: migrationKeys.detail(res.migration_id) });
+            qc.invalidateQueries({ queryKey: migrationKeys.approval(res.migration_id) });
+        },
+    });
+}
 
 const inlineMeta = { inlineStatuses: [409, 422] };
 

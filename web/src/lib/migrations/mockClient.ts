@@ -2,6 +2,7 @@ import { ApiError, api } from "../api";
 import type { MigrationClient } from "./client";
 import { httpClient } from "./httpClient";
 import { mockSeeds } from "./mockData";
+import { allowedActions, applyAction, demoJobs, materialize, newJob, type JobRecord } from "./mockJobs";
 import type { ApprovalGroup, ApprovalStatus, HistoryItem, Migration, MigrationInput, Revision } from "./types";
 import { validateInput } from "./validate";
 
@@ -10,6 +11,7 @@ type Store = {
     seeded: string[];
     items: Migration[];
     history?: HistoryItem[];
+    jobs?: Record<string, JobRecord>;
 };
 
 const storageKey = "dbmp-mock-migrations";
@@ -111,6 +113,16 @@ function seed(s: Store, dbId: string) {
             s.history = [...(s.history ?? []), item];
         }
     });
+}
+
+function ensureJobs(s: Store): Record<string, JobRecord> {
+    if (!s.jobs) {
+        const dbId = s.seeded[0] ?? "1";
+        seed(s, dbId);
+        const m = s.items.find((x) => x.database_id === dbId && x.title === "Isi ulang kolom total_harga");
+        s.jobs = demoJobs(m, dbId, Date.now());
+    }
+    return s.jobs;
 }
 
 function historyOf(s: Store, dbId: string): HistoryItem[] {
@@ -246,8 +258,10 @@ export const mockClient: MigrationClient = {
         }
         m.status = "Pending Queue";
         m.updated_at = new Date().toISOString();
+        const jobId = `contoh-${m.id}-${Date.now().toString(36)}`;
+        ensureJobs(s)[jobId] = newJob(jobId, m, Date.now());
         save(s);
-        return delay({ job_id: `contoh-${m.id}-${Date.now().toString(36)}`, message: "Migration masuk antrean." });
+        return delay({ job_id: jobId, message: "Migration masuk antrean." });
     },
     requiredApprovers: (dbId) => httpClient.requiredApprovers(dbId),
     approvalStatus: async (id) => {
@@ -275,5 +289,40 @@ export const mockClient: MigrationClient = {
         save(s);
         const item = historyOf(s, dbId).find((h) => h.execution_id === executionId);
         return item ? delay(item) : fail(404, "not_found", "Eksekusi tidak ditemukan.");
+    },
+    job: (id) => {
+        const s = load();
+        const rec = ensureJobs(s)[id];
+        if (!rec) {
+            save(s);
+            return fail(404, "not_found", "Job tidak ditemukan.");
+        }
+        materialize(rec, Date.now());
+        save(s);
+        return delay(rec.job);
+    },
+    jobAction: (id, action) => {
+        const s = load();
+        const rec = ensureJobs(s)[id];
+        if (!rec) {
+            return fail(404, "not_found", "Job tidak ditemukan.");
+        }
+        const now = Date.now();
+        materialize(rec, now);
+        if (!allowedActions(rec).includes(action)) {
+            save(s);
+            return fail(409, "invalid_status", "Aksi ini tidak diizinkan untuk status job sekarang.");
+        }
+        const res = applyAction(rec, action, now);
+        materialize(rec, now);
+        if (res.needsApproval) {
+            const m = find(s, rec.job.migration_id);
+            if (m) {
+                m.status = "Pending Review";
+                m.updated_at = new Date(now).toISOString();
+            }
+        }
+        save(s);
+        return delay({ message: res.message, migration_id: rec.job.migration_id, needs_approval: res.needsApproval });
     },
 };

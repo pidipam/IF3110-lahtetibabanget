@@ -1,6 +1,6 @@
 import { api, isApiError } from "../api";
 import { migrationPaths, type MigrationClient } from "./client";
-import type { ApprovalStatus, ExecuteResponse, HistoryItem, HistoryPage, Migration, RequiredApprovers } from "./types";
+import type { ApprovalStatus, ExecuteResponse, HistoryItem, HistoryPage, Job, JobActionResult, Migration, RequiredApprovers } from "./types";
 
 export const httpClient: MigrationClient = {
     mode: "http",
@@ -32,4 +32,6 @@ export const httpClient: MigrationClient = {
         return { items: res.items, page: res.page ?? query.page, page_size: res.page_size ?? query.pageSize, total: res.total ?? null };
     },
     historyItem: (dbId, executionId) => api.get<HistoryItem>(migrationPaths.historyItem(dbId, executionId)),
+    job: (id) => api.get<Job>(migrationPaths.job(id)),
+    jobAction: (id, action) => api.post<JobActionResult>(migrationPaths.jobAction(id, action)),
 };

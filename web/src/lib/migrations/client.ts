@@ -1,4 +1,4 @@
-import type { ApprovalStatus, ExecuteResponse, HistoryItem, HistoryPage, HistoryQuery, Migration, MigrationInput, RequiredApprovers } from "./types";
+import type { ApprovalStatus, ExecuteResponse, HistoryItem, HistoryPage, HistoryQuery, Job, JobAction, JobActionResult, Migration, MigrationInput, RequiredApprovers } from "./types";
 
 export type ClientMode = "mock" | "http";
 
@@ -14,6 +14,8 @@ export interface MigrationClient {
     approvalStatus(id: string): Promise<ApprovalStatus | null>;
     history(dbId: string, query: HistoryQuery): Promise<HistoryPage>;
     historyItem(dbId: string, executionId: string): Promise<HistoryItem>;
+    job(id: string): Promise<Job>;
+    jobAction(id: string, action: JobAction): Promise<JobActionResult>;
 }
 
 const enc = encodeURIComponent;
@@ -29,4 +31,6 @@ export const migrationPaths = {
     approvalStatus: (id: string) => `/api/migrations/${enc(id)}/approvals`,
     history: (dbId: string, q: HistoryQuery) => `/api/databases/${enc(dbId)}/history?${new URLSearchParams({ hide_rollback: String(q.hideRollback), page: String(q.page), page_size: String(q.pageSize) })}`,
     historyItem: (dbId: string, executionId: string) => `/api/databases/${enc(dbId)}/history/${enc(executionId)}`,
+    job: (id: string) => `/api/jobs/${enc(id)}`,
+    jobAction: (id: string, action: JobAction) => `/api/jobs/${enc(id)}/${action}`,
 };

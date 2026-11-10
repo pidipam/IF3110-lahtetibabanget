@@ -159,3 +159,72 @@ export const executionTypeInfo: Record<ExecutionType, StatusInfo> = {
 export function executionTypeOf(type: string): StatusInfo {
     return executionTypeInfo[type as ExecutionType] ?? { label: type, tone: "neutral" };
 }
+
+export type JobStatus = "queued" | "running" | "success" | "failed" | "partial" | "uncertain" | "partially_reverted" | "cancelled";
+
+export type JobAction = "rollback" | "forward" | "retry" | "resume" | "cancel";
+
+export type Job = {
+    job_id: string;
+    execution_id: string;
+    migration_id: string;
+    database_id: string;
+    title: string;
+    kind: "up" | "rollback" | "forward";
+    status: JobStatus;
+    attempt: number;
+    is_batch_mode: boolean;
+    batches_committed: number;
+    batches_total: number | null;
+    rows_committed: number;
+    rows_total: number | null;
+    error_message: string;
+    queued_at: string | null;
+    started_at: string | null;
+    finished_at: string | null;
+    updated_at: string;
+    allowed_actions: JobAction[];
+};
+
+export type JobActionResult = {
+    message: string;
+    job_id?: string;
+    migration_id: string;
+    needs_approval: boolean;
+};
+
+export const jobStatusInfo: Record<JobStatus, StatusInfo> = {
+    queued: { label: "Dalam antrean", tone: "neutral" },
+    running: { label: "Berjalan", tone: "info" },
+    success: { label: "Berhasil", tone: "success" },
+    failed: { label: "Gagal", tone: "off" },
+    partial: { label: "Sebagian", tone: "admin" },
+    uncertain: { label: "Tidak pasti", tone: "admin" },
+    partially_reverted: { label: "Rollback sebagian", tone: "admin" },
+    cancelled: { label: "Dibatalkan", tone: "neutral" },
+};
+
+export function jobStatusOf(status: string): StatusInfo {
+    return jobStatusInfo[status as JobStatus] ?? { label: status, tone: "neutral" };
+}
+
+export const jobKindLabel: Record<Job["kind"], string> = { up: "Terapkan", rollback: "Rollback", forward: "Forward" };
+
+export const jobActionOrder: JobAction[] = ["resume", "retry", "forward", "rollback", "cancel"];
+
+export const activePollMs = 2000;
+
+export const waitingPollMs = 10000;
+
+export function pollInterval(status: string): number | false {
+    switch (status) {
+        case "queued":
+        case "running":
+            return activePollMs;
+        case "partial":
+        case "uncertain":
+        case "partially_reverted":
+            return waitingPollMs;
+    }
+    return false;
+}
