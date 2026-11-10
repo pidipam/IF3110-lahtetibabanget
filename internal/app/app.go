@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/approval"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/auth"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/authz"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/dbconn"
@@ -40,6 +41,7 @@ type App struct {
 	handler       http.Handler
 	Migrations    *migration.Service
 	migrationExec *migration.Executor
+	Approvals *approval.Service
 }
 
 var notices = map[string]string{"connection_created": "Koneksi database berhasil dibuat.", "connection_updated": "Koneksi database berhasil diperbarui.", "connection_deleted": "Koneksi database berhasil dihapus.", "access_updated": "Akses database grup berhasil diperbarui."}
@@ -70,6 +72,7 @@ func New(opt Options) (*App, error) {
 		getSQL: a.Manager.GetSQL,
 	}, 0)
 	a.Migrations = migration.NewService(repo, a.migrationExec, a.Authz)
+	a.Approvals = approval.NewService(opt.DB, a.Authz)
 	a.routes()
 	a.handler = securityHeaders(a.logRequests(withSPA(webui.Handler(), a.Auth.LoadSession(a.mux))))
 	return a, nil

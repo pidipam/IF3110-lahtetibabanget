@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/adminapi"
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/approvalapi"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/sessionapi"
 )
 
@@ -36,5 +37,6 @@ func (a *App) routes() {
 	a.schemaDiffRoutes()
 	(&sessionapi.Handler{Users: a.Users, Sessions: a.Sessions, Auth: a.Auth, Authz: a.Authz, Conns: a.Conns, Logger: a.Logger}).RegisterRoutes(a.mux, a.Auth.RequireLogin)
 	(&adminapi.Handler{Users: a.Users, Sessions: a.Sessions, Auth: a.Auth, Grants: a.Grants, GrantStore: a.GrantStore, Conns: a.Conns, Logger: a.Logger}).RegisterRoutes(a.mux, a.Auth.RequireAdmin)
+	(&approvalapi.Handler{Approvals: a.Approvals, Authz: a.Authz, Logger: a.Logger}).RegisterRoutes(a.mux, a.Auth.RequireLogin)
 	a.mux.HandleFunc("/", a.notFound)
 }
