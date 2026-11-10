@@ -54,6 +54,32 @@ volume. Untuk menghapus semua data (termasuk akun admin) jalankan `docker compos
 
 `make run` membaca file `.env` bila ada (lihat `.env.example`; jangan di-commit).
 
+### SPA (Milestone 2)
+
+SPA ada di `web/` (Vite, React, TypeScript, React Router, TanStack Query, Tailwind) dan butuh Node.js 20 atau lebih baru.
+
+```bash
+make web-build   # npm ci lalu build ke web/dist; hasilnya di-embed ke binary Go
+make run         # SPA tersedia di http://localhost:8080/app/
+```
+
+Saat development, jalankan `make run` lalu `make web-dev` di terminal lain, kemudian buka
+http://localhost:5173/app/. Vite meneruskan `/api` ke `:8080`, jadi cookie sesi tetap satu origin.
+Selama halaman M1 masih dipakai, SPA dipasang di `/app/`. Rute selain `/api/*` di bawah `/app/`
+jatuh ke `index.html`. Bila `web/dist` belum dibuild, `/app/` mengembalikan 503.
+
+API sesi:
+
+| Endpoint | Keterangan |
+|---|---|
+| `GET /api/csrf` | Token CSRF untuk header `X-CSRF-Token`. Sebelum login berisi token pre-login, sesudah login token sesi. |
+| `POST /api/login` | Body `{"username","password"}`. 200 berisi data seperti `/api/me`; 401 `invalid_credentials`. |
+| `POST /api/logout` | Mencabut sesi, 204. |
+| `GET /api/me` | User, `is_admin`, `csrf_token`, dan `databases` (id, nama, engine, level `view` atau `edit`). |
+
+401 memakai kode `unauthenticated` (belum login) atau `session_expired` (sesi berakhir atau dicabut).
+Token CSRF yang salah menghasilkan 403 `csrf_invalid`.
+
 ### Konfigurasi (environment)
 
 | Variabel | Default | Keterangan |
