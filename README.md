@@ -116,11 +116,31 @@ API admin (hanya admin; non-admin 403 `forbidden`):
 | `GET /api/admin/groups/{id}/access` | Semua database beserta level grup (`none`, `view`, `edit`). |
 | `PUT /api/admin/groups/{id}/access` | Body `{"access":[{"db_id","level"}]}`. Semua item divalidasi sebelum ada yang diubah. |
 
+| `PUT /api/admin/groups/{id}/leader` | Body `{"user_id": 5}` atau `{"user_id": null}`. Leader harus anggota aktif Grup. |
+
 Daftar berpaginasi berbentuk `{"items":[...],"page":1,"page_size":20,"total":57}`.
 Hak yang turun (nonaktif, admin dicabut, reset password, keluar grup, akses turun atau dicabut,
 grup dihapus) langsung mencabut sesi user terkait. Hak yang naik (jadi admin, masuk grup, akses naik)
 membuat sesi dirotasi pada request berikutnya. Admin tidak bisa mencabut hak admin atau menonaktifkan
 dirinya sendiri (422 `self_lockout`). Username atau nama grup yang sudah dipakai menghasilkan 409 `conflict`.
+
+### Persetujuan migration
+
+Setiap eksekusi migration (`up`, `rollback`, `forward`) yang berstatus `pending_review` harus disetujui
+leader setiap Grup yang punya akses `view` atau `edit` ke database tujuan. Aturannya:
+
+- Grup tanpa leader aktif menahan proses (status `blocked`) dengan pesan yang menyebut Grup tersebut.
+- Pengaju tidak boleh menyetujui permintaannya sendiri. Kalau pengaju adalah leader Grup wajib, admin harus menunjuk leader lain.
+- Satu keputusan berlaku untuk semua Grup wajib yang dipimpin orang yang sama. Satu penolakan (alasan wajib) menolak permintaan.
+- Persetujuan terikat pada nomor revisi. Kalau revisi berubah, persetujuan lama tidak dihitung lagi.
+- Bila semua Grup setuju, status eksekusi menjadi `approved`. Worker wajib memanggil `approval.Service.Check` sebelum menjalankan. Kalau Check gagal (misalnya ada Grup baru yang diberi akses), worker memanggil `Reopen` agar permintaan kembali ke `pending_review`.
+
+| Endpoint | Keterangan |
+|---|---|
+| `GET /api/approvals?mine=true` | Permintaan yang menunggu keputusan Grup yang saya pimpin. Tanpa `mine`: semua permintaan `pending_review` di database yang bisa saya lihat. |
+| `GET /api/migrations/{id}/approvals` | Status persetujuan eksekusi terakhir migration (butuh akses view). |
+| `POST /api/migrations/{id}/approve` | Body `{"revision_number"}`. 403 bila bukan leader Grup wajib atau pengaju sendiri, 409 bila revisi berubah atau sudah diputuskan. |
+| `POST /api/migrations/{id}/reject` | Body `{"revision_number","reason"}`. Alasan wajib, maksimal 500 karakter. |
 
 ### Konfigurasi (environment)
 
