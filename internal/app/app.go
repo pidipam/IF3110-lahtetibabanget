@@ -42,7 +42,7 @@ type App struct {
 	migrationExec *migration.Executor
 }
 
-var notices = map[string]string{"user_created": "User berhasil dibuat.", "user_updated": "User berhasil diperbarui.", "password_reset": "Password berhasil direset dan semua sesi user tersebut diakhiri.", "group_created": "Grup berhasil dibuat.", "group_updated": "Grup berhasil diperbarui.", "group_deleted": "Grup berhasil dihapus.", "member_added": "Anggota berhasil ditambahkan.", "member_removed": "Anggota berhasil dikeluarkan.", "connection_created": "Koneksi database berhasil dibuat.", "connection_updated": "Koneksi database berhasil diperbarui.", "connection_deleted": "Koneksi database berhasil dihapus.", "access_updated": "Akses database grup berhasil diperbarui."}
+var notices = map[string]string{"connection_created": "Koneksi database berhasil dibuat.", "connection_updated": "Koneksi database berhasil diperbarui.", "connection_deleted": "Koneksi database berhasil dihapus.", "access_updated": "Akses database grup berhasil diperbarui."}
 
 func New(opt Options) (*App, error) {
 	rd, err := web.NewRenderer()
@@ -99,8 +99,6 @@ func navOf(path string) string {
 	switch {
 	case path == "/":
 		return "home"
-	case strings.HasPrefix(path, "/admin/users"):
-		return "users"
 	case strings.HasPrefix(path, "/admin/groups"):
 		return "groups"
 	case strings.HasPrefix(path, "/admin/connections"):
