@@ -29,15 +29,15 @@ func TestEvaluate(t *testing.T) {
 		state State
 		message string
 	}{
-		{"satu grup menunggu", exec("up", 2, 2), []Group{led(1, "Analis")}, nil, StateWaiting, "Grup Analis"},
+		{"satu grup menunggu", exec("up", 2, 2), []Group{led(1, "Analis")}, nil, StateWaiting, "grup Analis"},
 		{"satu grup setuju", exec("up", 2, 2), []Group{led(1, "Analis")}, []Vote{vote(1, 2, DecisionApproved)}, StateApproved, "Semua leader"},
-		{"banyak grup sebagian", exec("up", 1, 1), []Group{led(1, "Analis"), led(2, "Ops")}, []Vote{vote(1, 1, DecisionApproved)}, StateWaiting, "Grup Ops."},
+		{"banyak grup sebagian", exec("up", 1, 1), []Group{led(1, "Analis"), led(2, "Ops")}, []Vote{vote(1, 1, DecisionApproved)}, StateWaiting, "grup Ops."},
 		{"banyak grup semua", exec("up", 1, 1), []Group{led(1, "Analis"), led(2, "Ops")}, []Vote{vote(1, 1, DecisionApproved), vote(2, 1, DecisionApproved)}, StateApproved, ""},
 		{"grup tanpa leader", exec("up", 1, 1), []Group{led(1, "Analis"), {ID: 2, Name: "Ops"}}, []Vote{vote(1, 1, DecisionApproved)}, StateBlocked, "Grup Ops belum punya leader aktif"},
 		{"leader nonaktif", exec("up", 1, 1), []Group{inactive}, nil, StateBlocked, "Grup Gudang belum punya leader aktif"},
-		{"pengaju memimpin grup wajib", Execution{Kind: "up", Status: "pending_review", RevisionNumber: 1, CurrentRevision: 1, RequestedBy: 101}, []Group{led(1, "Analis"), led(2, "Ops")}, []Vote{vote(2, 1, DecisionApproved)}, StateBlocked, "Pengaju adalah leader Grup Analis"},
-		{"tanpa leader dan pengaju leader", Execution{Kind: "up", Status: "pending_review", RevisionNumber: 1, CurrentRevision: 1, RequestedBy: 101}, []Group{led(1, "Analis"), {ID: 2, Name: "Ops"}}, nil, StateBlocked, "Grup Ops belum punya leader aktif. Minta admin menetapkan leader. Pengaju adalah leader Grup Analis"},
-		{"tanpa grup", exec("up", 1, 1), nil, nil, StateBlocked, "Belum ada Grup"},
+		{"pengaju memimpin grup wajib", Execution{Kind: "up", Status: "pending_review", RevisionNumber: 1, CurrentRevision: 1, RequestedBy: 101}, []Group{led(1, "Analis"), led(2, "Ops")}, []Vote{vote(2, 1, DecisionApproved)}, StateBlocked, "Pengaju adalah leader grup Analis"},
+		{"tanpa leader dan pengaju leader", Execution{Kind: "up", Status: "pending_review", RevisionNumber: 1, CurrentRevision: 1, RequestedBy: 101}, []Group{led(1, "Analis"), {ID: 2, Name: "Ops"}}, nil, StateBlocked, "Grup Ops belum punya leader aktif. Minta admin menetapkan leader. Pengaju adalah leader grup Analis"},
+		{"tanpa grup", exec("up", 1, 1), nil, nil, StateBlocked, "Belum ada grup"},
 		{"satu menolak", exec("up", 1, 1), []Group{led(1, "Analis"), led(2, "Ops")}, []Vote{vote(1, 1, DecisionApproved), vote(2, 1, DecisionRejected)}, StateRejected, "ditolak"},
 		{"revisi lama tidak dihitung", exec("up", 3, 3), []Group{led(1, "Analis")}, []Vote{vote(1, 2, DecisionApproved)}, StateWaiting, ""},
 		{"revisi berubah", exec("up", 2, 3), []Group{led(1, "Analis")}, []Vote{vote(1, 2, DecisionApproved)}, StateStale, "Revisi migration berubah"},
@@ -70,8 +70,8 @@ func TestEvaluateRejectedExecutionKeepsReason(t *testing.T) {
 }
 
 func TestStaleErrorIs(t *testing.T) {
-	err := error(&StaleError{State: StateWaiting, Message: "Menunggu persetujuan leader Grup Ops."})
-	if !errors.Is(err, ErrApprovalStale) || !strings.Contains(err.Error(), "Grup Ops") {
+	err := error(&StaleError{State: StateWaiting, Message: "Menunggu persetujuan leader grup Ops."})
+	if !errors.Is(err, ErrApprovalStale) || !strings.Contains(err.Error(), "grup Ops") {
 		t.Fatalf("got %v", err)
 	}
 }

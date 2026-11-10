@@ -15,7 +15,7 @@ var (
 	ErrNotFound = errors.New("migration tidak ditemukan")
 	ErrNoPending = errors.New("tidak ada permintaan yang menunggu persetujuan")
 	ErrRevisionMismatch = errors.New("revisi sudah berubah, muat ulang halaman sebelum memutuskan")
-	ErrNotApprover = errors.New("Anda bukan leader Grup yang wajib menyetujui permintaan ini")
+	ErrNotApprover = errors.New("Anda bukan leader grup yang wajib menyetujui permintaan ini")
 	ErrSelfApproval = errors.New("pengaju tidak boleh memutuskan permintaannya sendiri")
 	ErrAlreadyDecided = errors.New("Grup Anda sudah memberi keputusan untuk revisi ini")
 	ErrReasonRequired = errors.New("alasan penolakan wajib diisi")

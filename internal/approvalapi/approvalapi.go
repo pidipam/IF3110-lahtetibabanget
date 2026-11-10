@@ -175,12 +175,12 @@ func requiredDTO(dbID int64, groups []approval.Group) RequiredApproversDTO {
 	switch {
 	case len(groups) == 0:
 		out.Ready = false
-		out.Message = "Belum ada Grup yang punya akses ke database ini, jadi tidak ada yang bisa menyetujui."
+		out.Message = "Belum ada grup yang punya akses ke database ini, jadi tidak ada yang bisa menyetujui."
 	case len(missing) > 0:
 		out.Ready = false
 		out.Message = "Grup " + strings.Join(missing, ", ") + " belum punya leader aktif. Minta admin menetapkan leader."
 	default:
-		out.Message = "Semua Grup wajib sudah punya leader."
+		out.Message = "Semua grup wajib sudah punya leader."
 	}
 	return out
 }
@@ -259,7 +259,7 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error) 
 	case errors.Is(err, approval.ErrSelfApproval):
 		httpapi.WriteError(w, http.StatusForbidden, "self_approval", "Pengaju tidak boleh memutuskan permintaannya sendiri. Minta leader lain.", nil)
 	case errors.Is(err, approval.ErrNotApprover):
-		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "Hanya leader Grup yang punya akses ke database ini yang bisa memutuskan.", nil)
+		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "Hanya leader grup yang punya akses ke database ini yang bisa memutuskan.", nil)
 	case errors.Is(err, authz.ErrForbidden):
 		httpapi.Forbidden(w)
 	case errors.Is(err, approval.ErrReasonRequired):

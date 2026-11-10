@@ -128,7 +128,7 @@ func Evaluate(exec Execution, groups []Group, votes []Vote) Status {
 		st.Message = "Revisi migration berubah setelah permintaan diajukan. Persetujuan lama tidak berlaku, ajukan ulang."
 	case len(groups) == 0:
 		st.State = StateBlocked
-		st.Message = "Belum ada Grup yang punya akses ke database ini, jadi tidak ada yang bisa menyetujui."
+		st.Message = "Belum ada grup yang punya akses ke database ini, jadi tidak ada yang bisa menyetujui."
 	case len(noLeader) > 0 || len(selfLed) > 0:
 		st.State = StateBlocked
 		var parts []string
@@ -136,15 +136,15 @@ func Evaluate(exec Execution, groups []Group, votes []Vote) Status {
 			parts = append(parts, "Grup "+names(noLeader)+" belum punya leader aktif. Minta admin menetapkan leader.")
 		}
 		if len(selfLed) > 0 {
-			parts = append(parts, "Pengaju adalah leader Grup "+names(selfLed)+" dan tidak boleh menyetujui sendiri. Minta admin menetapkan leader lain.")
+			parts = append(parts, "Pengaju adalah leader grup "+names(selfLed)+" dan tidak boleh menyetujui sendiri. Minta admin menetapkan leader lain.")
 		}
 		st.Message = strings.Join(parts, " ")
 	case len(pending) > 0:
 		st.State = StateWaiting
-		st.Message = "Menunggu persetujuan leader Grup " + names(pending) + "."
+		st.Message = "Menunggu persetujuan leader grup " + names(pending) + "."
 	default:
 		st.State = StateApproved
-		st.Message = "Semua leader Grup sudah menyetujui."
+		st.Message = "Semua leader grup sudah menyetujui."
 	}
 	return st
 }

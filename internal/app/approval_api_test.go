@@ -151,7 +151,7 @@ func TestAPIApprovalFlow(t *testing.T) {
 	w := ani.send("GET", "/api/approvals?mine=true", "", "")
 	expectStatus(t, w, http.StatusOK)
 	decodeBody(t, w, &page)
-	if page.Total != 1 || page.Items[0].MigrationID != mid || !page.Items[0].CanDecide || page.Items[0].State != "blocked" || !strings.Contains(page.Items[0].Message, "Pengaju adalah leader Grup pengaju") || len(page.Items[0].Groups) != 3 {
+	if page.Total != 1 || page.Items[0].MigrationID != mid || !page.Items[0].CanDecide || page.Items[0].State != "blocked" || !strings.Contains(page.Items[0].Message, "Pengaju adalah leader grup pengaju") || len(page.Items[0].Groups) != 3 {
 		t.Fatalf("daftar persetujuan ani salah: %+v", page)
 	}
 	if page.Items[0].RequestedBy.Username != "dev" || page.Items[0].Database.ID != conn.ID || page.Items[0].Kind != "up" {

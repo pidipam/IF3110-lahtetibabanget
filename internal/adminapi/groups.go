@@ -418,7 +418,7 @@ func (h *Handler) putLeader(w http.ResponseWriter, r *http.Request) {
 	}
 	prev, err := h.Users.SetLeader(ctx, g.ID, userID)
 	if errors.Is(err, users.ErrNotMember) {
-		httpapi.Invalid(w, "Leader tidak valid.", map[string]string{"user_id": "User harus menjadi anggota Grup terlebih dahulu."})
+		httpapi.Invalid(w, "Leader tidak valid.", map[string]string{"user_id": "User harus menjadi anggota grup terlebih dahulu."})
 		return
 	}
 	if errors.Is(err, users.ErrNotFound) {

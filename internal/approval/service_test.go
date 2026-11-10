@@ -300,7 +300,7 @@ func TestCheckFailsWhenGroupGainsAccessAfterApproval(t *testing.T) {
 	gc := f.group("baru", authz.LevelNone, &c)
 	testutil.SeedGrant(t, f.db, gc, f.conn, authz.LevelView)
 	err := f.svc.Check(ctx, eid)
-	if !errors.Is(err, approval.ErrApprovalStale) || !strings.Contains(err.Error(), "Grup baru") {
+	if !errors.Is(err, approval.ErrApprovalStale) || !strings.Contains(err.Error(), "grup baru") {
 		t.Fatalf("Check harus gagal karena grup baru: %v", err)
 	}
 	if err := f.svc.Reopen(ctx, eid); err != nil || f.status(eid) != "pending_review" {
