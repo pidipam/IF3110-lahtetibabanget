@@ -11,7 +11,11 @@ type NavItem = {
     adminOnly?: boolean;
 };
 
-export const navItems: NavItem[] = [{ to: "/", label: "Beranda", end: true }];
+export const navItems: NavItem[] = [
+    { to: "/", label: "Beranda", end: true },
+    { to: "/admin/user", label: "User", adminOnly: true },
+    { to: "/admin/grup", label: "Grup", adminOnly: true },
+];
 
 function visibleItems(me: Me) {
     return navItems.filter((i) => !i.adminOnly || me.is_admin);

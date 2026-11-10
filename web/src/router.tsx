@@ -8,6 +8,12 @@ import { ErrorPage, ErrorView, NotFoundPage, RouteErrorPage } from "./pages/Erro
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
 import { SessionExpiredPage } from "./pages/SessionExpiredPage";
+import { GroupNewPage } from "./pages/admin/GroupNewPage";
+import { GroupPage } from "./pages/admin/GroupPage";
+import { GroupsPage } from "./pages/admin/GroupsPage";
+import { UserEditPage } from "./pages/admin/UserEditPage";
+import { UserNewPage } from "./pages/admin/UserNewPage";
+import { UsersPage } from "./pages/admin/UsersPage";
 
 export const basename = "/app";
 
@@ -48,6 +54,19 @@ export const router = createBrowserRouter(
                     element: <RequireAuth />,
                     children: [
                         { index: true, element: <HomePage /> },
+                        {
+                            path: "/admin",
+                            element: <RequireAdmin />,
+                            children: [
+                                { index: true, element: <Navigate to="/admin/user" replace /> },
+                                { path: "user", element: <UsersPage /> },
+                                { path: "user/baru", element: <UserNewPage /> },
+                                { path: "user/:id", element: <UserEditPage /> },
+                                { path: "grup", element: <GroupsPage /> },
+                                { path: "grup/baru", element: <GroupNewPage /> },
+                                { path: "grup/:id", element: <GroupPage /> },
+                            ],
+                        },
                         { path: "/error/:code", element: <ErrorPage /> },
                         { path: "*", element: <NotFoundPage /> },
                     ],
