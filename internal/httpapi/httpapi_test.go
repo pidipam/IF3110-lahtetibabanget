@@ -57,3 +57,51 @@ func TestIsAPI(t *testing.T) {
 		}
 	}
 }
+
+func TestParsePage(t *testing.T) {
+	cases := []struct {
+		query string
+		page int
+		size int
+		ok bool
+	}{{"", 1, DefaultPageSize, true}, {"page=3&page_size=50", 3, 50, true}, {"page_size=100", 1, 100, true}, {"page=0", 0, 0, false}, {"page=-1", 0, 0, false}, {"page=abc", 0, 0, false}, {"page_size=0", 0, 0, false}, {"page_size=101", 0, 0, false}, {"page=1.5", 0, 0, false}}
+	for _, tc := range cases {
+		w := httptest.NewRecorder()
+		p, ok := ParsePage(w, httptest.NewRequest("GET", "/api/x?"+tc.query, nil))
+		if ok != tc.ok {
+			t.Fatalf("%q: ok %v, want %v", tc.query, ok, tc.ok)
+		}
+		if !ok {
+			if w.Code != http.StatusUnprocessableEntity || !strings.Contains(w.Body.String(), "validation_error") {
+				t.Fatalf("%q: status %d body %s", tc.query, w.Code, w.Body.String())
+			}
+			continue
+		}
+		if p.Page != tc.page || p.PageSize != tc.size {
+			t.Fatalf("%q: got %+v", tc.query, p)
+		}
+	}
+	if (PageParams{Page: 3, PageSize: 20}).Offset() != 40 {
+		t.Fatal("offset salah")
+	}
+}
+
+func TestNewPageNeverNull(t *testing.T) {
+	b, _ := json.Marshal(NewPage[int](nil, PageParams{Page: 2, PageSize: 10}, 15))
+	if string(b) != `{"items":[],"page":2,"page_size":10,"total":15}` {
+		t.Fatalf("got %s", b)
+	}
+}
+
+func TestPathID(t *testing.T) {
+	mux := http.NewServeMux()
+	var got int64
+	var ok bool
+	mux.HandleFunc("/x/{id}", func(w http.ResponseWriter, r *http.Request) { got, ok = PathID(r, "id") })
+	for path, want := range map[string]int64{"/x/12": 12, "/x/0": 0, "/x/-3": 0, "/x/abc": 0, "/x/99999999999999999999": 0} {
+		mux.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", path, nil))
+		if ok != (want > 0) || (ok && got != want) {
+			t.Fatalf("%s: got %d %v", path, got, ok)
+		}
+	}
+}

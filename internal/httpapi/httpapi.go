@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -12,12 +13,28 @@ const Prefix = "/api/"
 
 const MaxBodyBytes = 1 << 20
 
+const DefaultPageSize = 20
+
+const MaxPageSize = 100
+
 var ErrInvalidBody = errors.New("body JSON tidak valid")
 
 type ErrorBody struct {
 	Code string `json:"code"`
 	Message string `json:"message"`
 	Details any `json:"details,omitempty"`
+}
+
+type PageParams struct {
+	Page int
+	PageSize int
+}
+
+type Page[T any] struct {
+	Items []T `json:"items"`
+	Page int `json:"page"`
+	PageSize int `json:"page_size"`
+	Total int `json:"total"`
 }
 
 type errorEnvelope struct {
@@ -80,4 +97,45 @@ func Internal(w http.ResponseWriter) {
 
 func Invalid(w http.ResponseWriter, message string, details any) {
 	WriteError(w, http.StatusUnprocessableEntity, "validation_error", message, details)
+}
+
+func (p PageParams) Offset() int {
+	return (p.Page - 1) * p.PageSize
+}
+
+func ParsePage(w http.ResponseWriter, r *http.Request) (PageParams, bool) {
+	p := PageParams{Page: 1, PageSize: DefaultPageSize}
+	details := map[string]string{}
+	q := r.URL.Query()
+	if v := q.Get("page"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			details["page"] = "Page harus bilangan bulat minimal 1."
+		}
+		p.Page = n
+	}
+	if v := q.Get("page_size"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > MaxPageSize {
+			details["page_size"] = "Page size harus bilangan bulat 1 sampai " + strconv.Itoa(MaxPageSize) + "."
+		}
+		p.PageSize = n
+	}
+	if len(details) > 0 {
+		Invalid(w, "Parameter paginasi tidak valid.", details)
+		return p, false
+	}
+	return p, true
+}
+
+func NewPage[T any](items []T, p PageParams, total int) Page[T] {
+	if items == nil {
+		items = []T{}
+	}
+	return Page[T]{Items: items, Page: p.Page, PageSize: p.PageSize, Total: total}
+}
+
+func PathID(r *http.Request, name string) (int64, bool) {
+	id, err := strconv.ParseInt(r.PathValue(name), 10, 64)
+	return id, err == nil && id > 0
 }
