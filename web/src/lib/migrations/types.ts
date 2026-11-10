@@ -123,3 +123,39 @@ export function canSubmit(status: string): boolean {
 export function canExecute(status: string): boolean {
     return status === "Approved";
 }
+
+export type ExecutionType = "APPLY" | "ROLLBACK" | "FORWARD";
+
+export type HistoryItem = {
+    execution_id: string;
+    migration_id: string;
+    revision_id: string;
+    execution_type: ExecutionType;
+    executed_by: string;
+    executed_at: string;
+    sql_executed: string;
+    reverted_execution_id?: string;
+};
+
+export type HistoryQuery = {
+    hideRollback: boolean;
+    page: number;
+    pageSize: number;
+};
+
+export type HistoryPage = {
+    items: HistoryItem[];
+    page: number;
+    page_size: number;
+    total: number | null;
+};
+
+export const executionTypeInfo: Record<ExecutionType, StatusInfo> = {
+    APPLY: { label: "Terapkan", tone: "info" },
+    ROLLBACK: { label: "Rollback", tone: "admin" },
+    FORWARD: { label: "Forward", tone: "success" },
+};
+
+export function executionTypeOf(type: string): StatusInfo {
+    return executionTypeInfo[type as ExecutionType] ?? { label: type, tone: "neutral" };
+}

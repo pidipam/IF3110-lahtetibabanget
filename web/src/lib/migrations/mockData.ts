@@ -1,4 +1,4 @@
-import type { MigrationInput } from "./types";
+import type { ExecutionType, MigrationInput } from "./types";
 
 export type MockSeed = {
     title: string;
@@ -6,6 +6,7 @@ export type MockSeed = {
     revisions: number;
     input: MigrationInput;
     daysAgo: number;
+    history?: { type: ExecutionType; daysAgo: number; by: string }[];
 };
 
 export const mockSeeds: MockSeed[] = [
@@ -14,6 +15,7 @@ export const mockSeeds: MockSeed[] = [
         status: "Success",
         revisions: 1,
         daysAgo: 12,
+        history: [{ type: "APPLY", daysAgo: 11.9, by: "ani" }],
         input: {
             title: "Tambah index email pelanggan",
             sql_up: "CREATE INDEX idx_pelanggan_email ON pelanggan (email);",
@@ -27,6 +29,12 @@ export const mockSeeds: MockSeed[] = [
         status: "Approved",
         revisions: 2,
         daysAgo: 3,
+        history: [
+            { type: "APPLY", daysAgo: 6, by: "dev" },
+            { type: "ROLLBACK", daysAgo: 5.5, by: "dev" },
+            { type: "FORWARD", daysAgo: 5, by: "ani" },
+            { type: "ROLLBACK", daysAgo: 4, by: "ani" },
+        ],
         input: {
             title: "Tambah kolom status pada pesanan",
             sql_up: "ALTER TABLE pesanan\n    ADD COLUMN status TEXT NOT NULL DEFAULT 'baru';",

@@ -1,6 +1,6 @@
 import { api, isApiError } from "../api";
 import { migrationPaths, type MigrationClient } from "./client";
-import type { ApprovalStatus, ExecuteResponse, Migration, RequiredApprovers } from "./types";
+import type { ApprovalStatus, ExecuteResponse, HistoryItem, HistoryPage, Migration, RequiredApprovers } from "./types";
 
 export const httpClient: MigrationClient = {
     mode: "http",
@@ -24,4 +24,12 @@ export const httpClient: MigrationClient = {
             throw err;
         }
     },
+    history: async (dbId, query) => {
+        const res = await api.get<HistoryItem[] | Partial<HistoryPage> & { items: HistoryItem[] }>(migrationPaths.history(dbId, query));
+        if (Array.isArray(res)) {
+            return { items: res, page: 1, page_size: res.length, total: null };
+        }
+        return { items: res.items, page: res.page ?? query.page, page_size: res.page_size ?? query.pageSize, total: res.total ?? null };
+    },
+    historyItem: (dbId, executionId) => api.get<HistoryItem>(migrationPaths.historyItem(dbId, executionId)),
 };

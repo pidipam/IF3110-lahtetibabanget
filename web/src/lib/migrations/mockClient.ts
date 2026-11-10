@@ -2,13 +2,14 @@ import { ApiError, api } from "../api";
 import type { MigrationClient } from "./client";
 import { httpClient } from "./httpClient";
 import { mockSeeds } from "./mockData";
-import type { ApprovalGroup, ApprovalStatus, Migration, MigrationInput, Revision } from "./types";
+import type { ApprovalGroup, ApprovalStatus, HistoryItem, Migration, MigrationInput, Revision } from "./types";
 import { validateInput } from "./validate";
 
 type Store = {
     seq: number;
     seeded: string[];
     items: Migration[];
+    history?: HistoryItem[];
 };
 
 const storageKey = "dbmp-mock-migrations";
@@ -89,7 +90,32 @@ function seed(s: Store, dbId: string) {
             created_at: at,
             updated_at: at,
         });
+        let last = "";
+        for (const h of m.history ?? []) {
+            s.seq++;
+            const rev = s.items[s.items.length - 1].current_revision;
+            const item: HistoryItem = {
+                execution_id: String(s.seq),
+                migration_id: id,
+                revision_id: rev.id,
+                execution_type: h.type,
+                executed_by: h.by,
+                executed_at: new Date(Date.now() - h.daysAgo * 86400000).toISOString(),
+                sql_executed: h.type === "ROLLBACK" ? (rev.sql_down ?? "") : rev.sql_up,
+            };
+            if (h.type === "ROLLBACK") {
+                item.reverted_execution_id = last;
+            } else {
+                last = item.execution_id;
+            }
+            s.history = [...(s.history ?? []), item];
+        }
     });
+}
+
+function historyOf(s: Store, dbId: string): HistoryItem[] {
+    const ids = new Set(s.items.filter((m) => m.database_id === dbId).map((m) => m.id));
+    return (s.history ?? []).filter((h) => ids.has(h.migration_id)).sort((a, b) => b.executed_at.localeCompare(a.executed_at));
 }
 
 function find(s: Store, id: string): Migration | undefined {
@@ -230,5 +256,24 @@ export const mockClient: MigrationClient = {
             return fail(404, "not_found", "Migration tidak ditemukan.");
         }
         return approvalFor(m);
+    },
+    history: (dbId, query) => {
+        const s = load();
+        seed(s, dbId);
+        save(s);
+        let items = historyOf(s, dbId);
+        if (query.hideRollback) {
+            const reverted = new Set(items.filter((h) => h.execution_type === "ROLLBACK").map((h) => h.reverted_execution_id));
+            items = items.filter((h) => h.execution_type !== "ROLLBACK" && !reverted.has(h.execution_id));
+        }
+        const start = (query.page - 1) * query.pageSize;
+        return delay({ items: items.slice(start, start + query.pageSize), page: query.page, page_size: query.pageSize, total: items.length });
+    },
+    historyItem: (dbId, executionId) => {
+        const s = load();
+        seed(s, dbId);
+        save(s);
+        const item = historyOf(s, dbId).find((h) => h.execution_id === executionId);
+        return item ? delay(item) : fail(404, "not_found", "Eksekusi tidak ditemukan.");
     },
 };

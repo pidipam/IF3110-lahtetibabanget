@@ -1,9 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { isApiError } from "../api";
 import type { MigrationClient } from "./client";
 import { httpClient } from "./httpClient";
 import { mockClient } from "./mockClient";
-import type { Migration, MigrationInput } from "./types";
+import type { HistoryQuery, Migration, MigrationInput } from "./types";
 
 export const migrationClient: MigrationClient = import.meta.env.VITE_MIGRATION_API === "http" ? httpClient : mockClient;
 
@@ -15,7 +15,12 @@ export const migrationKeys = {
     detail: (id: string) => ["migrations", "item", id] as const,
     approval: (id: string) => ["migrations", "item", id, "approval"] as const,
     approvers: (dbId: string) => ["migrations", "db", dbId, "approvers"] as const,
+    history: (dbId: string) => ["migrations", "db", dbId, "history"] as const,
+    historyPage: (dbId: string, q: HistoryQuery) => ["migrations", "db", dbId, "history", q] as const,
+    historyItem: (dbId: string, executionId: string) => ["migrations", "db", dbId, "history", "item", executionId] as const,
 };
+
+export const historyPageSize = 20;
 
 const inlineMeta = { inlineStatuses: [409, 422] };
 
@@ -37,6 +42,14 @@ export function useRequiredApprovers(dbId: string | undefined) {
 
 export function useApprovalStatus(id: string, enabled: boolean) {
     return useQuery({ queryKey: migrationKeys.approval(id), queryFn: () => migrationClient.approvalStatus(id), enabled });
+}
+
+export function useHistory(dbId: string, q: HistoryQuery) {
+    return useQuery({ queryKey: migrationKeys.historyPage(dbId, q), queryFn: () => migrationClient.history(dbId, q), placeholderData: keepPreviousData });
+}
+
+export function useHistoryItem(dbId: string, executionId: string) {
+    return useQuery({ queryKey: migrationKeys.historyItem(dbId, executionId), queryFn: () => migrationClient.historyItem(dbId, executionId) });
 }
 
 function useStore() {
@@ -70,6 +83,7 @@ export function useExecuteMigration(id: string, dbId: string) {
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: migrationKeys.detail(id) });
             qc.invalidateQueries({ queryKey: migrationKeys.list(dbId) });
+            qc.invalidateQueries({ queryKey: migrationKeys.history(dbId) });
         },
     });
 }
