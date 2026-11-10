@@ -1,3 +1,4 @@
+import { Link } from "react-router";
 import { DataTable, type Column } from "../components/DataTable";
 import { EmptyState } from "../components/EmptyState";
 import { levelLabel, type DatabaseAccess, type Me } from "../lib/session";
@@ -6,7 +7,15 @@ import { useCurrentUser } from "../lib/currentUser";
 const engineLabel: Record<string, string> = { postgres: "PostgreSQL", mysql: "MySQL", mariadb: "MariaDB" };
 
 const columns: Column<DatabaseAccess>[] = [
-    { key: "name", header: "Nama", render: (d) => <span className="font-medium">{d.name}</span> },
+    {
+        key: "name",
+        header: "Nama",
+        render: (d) => (
+            <Link to={`/migration/database/${d.id}`} className="font-medium text-indigo-700 hover:underline">
+                {d.name}
+            </Link>
+        ),
+    },
     { key: "engine", header: "Engine", nowrap: true, render: (d) => engineLabel[d.engine] ?? d.engine },
     {
         key: "level",

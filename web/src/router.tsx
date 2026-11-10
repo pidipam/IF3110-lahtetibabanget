@@ -14,6 +14,10 @@ import { GroupsPage } from "./pages/admin/GroupsPage";
 import { UserEditPage } from "./pages/admin/UserEditPage";
 import { UserNewPage } from "./pages/admin/UserNewPage";
 import { UsersPage } from "./pages/admin/UsersPage";
+import { DatabasePickerPage } from "./pages/migration/DatabasePickerPage";
+import { MigrationEditPage, MigrationNewPage } from "./pages/migration/MigrationEditorPage";
+import { MigrationListPage } from "./pages/migration/MigrationListPage";
+import { MigrationReviewPage } from "./pages/migration/MigrationReviewPage";
 
 export const basename = "/app";
 
@@ -54,6 +58,11 @@ export const router = createBrowserRouter(
                     element: <RequireAuth />,
                     children: [
                         { index: true, element: <HomePage /> },
+                        { path: "/migration", element: <DatabasePickerPage /> },
+                        { path: "/migration/database/:dbId", element: <MigrationListPage /> },
+                        { path: "/migration/database/:dbId/baru", element: <MigrationNewPage /> },
+                        { path: "/migration/:id", element: <MigrationReviewPage /> },
+                        { path: "/migration/:id/ubah", element: <MigrationEditPage /> },
                         {
                             path: "/admin",
                             element: <RequireAdmin />,

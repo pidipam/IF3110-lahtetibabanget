@@ -13,6 +13,7 @@ type NavItem = {
 
 export const navItems: NavItem[] = [
     { to: "/", label: "Beranda", end: true },
+    { to: "/migration", label: "Migration" },
     { to: "/admin/user", label: "User", adminOnly: true },
     { to: "/admin/grup", label: "Grup", adminOnly: true },
 ];
