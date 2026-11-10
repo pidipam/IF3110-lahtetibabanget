@@ -14,7 +14,7 @@ export function MockBanner() {
     }
     return (
         <div role="note" className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-inset ring-amber-200">
-            Data contoh. API migration belum tersambung, jadi perubahan hanya tersimpan di tab ini.
+            Data contoh. API migration belum tersambung sehingga perubahan hanya tersimpan di tab ini.
         </div>
     );
 }

@@ -23,7 +23,7 @@ export function ResponsiveList<T>({ columns, rows, rowKey, caption, empty, minWi
             </div>
             <ul aria-label={caption} className="space-y-3 md:hidden">
                 {rows.map((row) => (
-                    <li key={rowKey(row)} className="rounded-lg bg-white p-4 ring-1 ring-slate-200">
+                    <li key={rowKey(row)} className="card p-4">
                         <div className="mb-2 min-w-0 break-words font-medium text-slate-900">{first.render(row)}</div>
                         <dl className="space-y-2 text-sm">
                             {rest.map((c) => (

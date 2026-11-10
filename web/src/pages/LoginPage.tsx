@@ -3,12 +3,14 @@ import { Navigate, useLocation, useNavigate } from "react-router";
 import { Button } from "../components/Button";
 import { Field, FormError, Input, fieldErrors } from "../components/Form";
 import { Loading } from "../components/Loading";
+import { Logo } from "../components/Layout";
 import { isApiError } from "../lib/api";
 import { routeForError } from "../lib/queryClient";
 import { useLogin, useMe } from "../lib/session";
 
 function safeFrom(state: unknown): string {
-    const from = (state as { from?: string } | null)?.from;
+    const raw = (state as { from?: string } | null)?.from;
+    const from = typeof raw === "string" && (raw === "/app" || raw.startsWith("/app/")) ? raw.slice(4) || "/" : raw;
     if (typeof from === "string" && from.startsWith("/") && !from.startsWith("//") && from !== "/login" && from !== "/sesi-berakhir") {
         return from;
     }
@@ -70,25 +72,32 @@ export function LoginPage() {
     };
 
     return (
-        <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-8">
-            <div className="w-full max-w-sm">
-                <div className="mb-6 text-center">
-                    <h1 className="text-2xl font-bold text-slate-900">Database Management Platform</h1>
-                    <p className="mt-1 text-sm text-slate-600">Masuk untuk melanjutkan.</p>
+        <div className="min-h-screen">
+            <header className="mx-auto flex max-w-[1180px] items-center px-4 py-4 md:px-10 md:py-[22px]">
+                <span className="flex items-center gap-2.5 font-brand text-xl font-bold tracking-tight text-slate-900">
+                    <Logo />
+                    lahtetibabanget
+                </span>
+            </header>
+            <main className="px-4 pb-16">
+                <section className="hero">
+                    <h1>Manajemen Database</h1>
+                </section>
+                <div className="card mx-auto max-w-[440px] p-6 sm:p-7">
+                    <form onSubmit={onSubmit} noValidate className="space-y-4">
+                        <FormError message={formError} />
+                        <Field label="Username" error={errors.username}>
+                            {(p) => <Input {...p} name="username" autoComplete="username" autoCapitalize="off" value={username} onChange={(e) => setUsername(e.target.value)} autoFocus />}
+                        </Field>
+                        <Field label="Password" error={errors.password}>
+                            {(p) => <Input {...p} name="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />}
+                        </Field>
+                        <Button type="submit" block loading={login.isPending} className="mt-2">
+                            Masuk
+                        </Button>
+                    </form>
                 </div>
-                <form onSubmit={onSubmit} noValidate className="space-y-4 rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-                    <FormError message={formError} />
-                    <Field label="Username" error={errors.username}>
-                        {(p) => <Input {...p} name="username" autoComplete="username" autoCapitalize="off" value={username} onChange={(e) => setUsername(e.target.value)} autoFocus />}
-                    </Field>
-                    <Field label="Password" error={errors.password}>
-                        {(p) => <Input {...p} name="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />}
-                    </Field>
-                    <Button type="submit" block loading={login.isPending}>
-                        Masuk
-                    </Button>
-                </form>
-            </div>
+            </main>
         </div>
     );
 }

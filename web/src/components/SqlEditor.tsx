@@ -79,7 +79,7 @@ export function SqlEditor({ id, value, onChange, readOnly = false, rows = 14, pl
                 />
             </div>
             {!readOnly && (
-                <p id={hintId} className="mt-1 text-xs text-slate-500">
+                <p id={hintId} className="sr-only">
                     Tab menyisipkan 4 spasi. Tekan Esc lalu Tab untuk keluar dari editor.
                 </p>
             )}

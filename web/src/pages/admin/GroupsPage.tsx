@@ -32,14 +32,13 @@ export function GroupsPage() {
         <div className="space-y-6">
             <PageHeader
                 title="Grup"
-                description="Grup menentukan database yang bisa diakses anggotanya."
                 actions={
-                    <Link to="/admin/grup/baru" className="inline-flex min-h-10 items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
-                        Tambah Grup
+                    <Link to="/admin/grup/baru" className="btn btn-primary">
+                        Tambah grup
                     </Link>
                 }
             />
-            <SearchInput label="Cari nama Grup" placeholder="Cari nama Grup" value={list.q} onSearch={setQuery} />
+            <SearchInput label="Cari nama grup" placeholder="Cari nama grup" value={list.q} onSearch={setQuery} />
             {groups.isPending ? (
                 <Loading />
             ) : groups.isError ? (
@@ -47,12 +46,12 @@ export function GroupsPage() {
             ) : (
                 <div className="space-y-4">
                     <ResponsiveList
-                        caption="Daftar Grup"
+                        caption="Daftar grup"
                         columns={columns}
                         rows={groups.data.items}
                         rowKey={(g) => g.id}
                         minWidth="36rem"
-                        empty={<EmptyState title={list.q ? "Tidak ada Grup yang cocok." : "Belum ada Grup."} />}
+                        empty={<EmptyState title={list.q ? "Tidak ada grup yang cocok." : "Belum ada grup."} />}
                     />
                     <Pagination page={list.page} pageSize={pageSize} total={groups.data.total} onChange={setPage} />
                 </div>

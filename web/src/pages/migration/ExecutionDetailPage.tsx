@@ -98,7 +98,7 @@ export function ExecutionDetailPage() {
                 </dl>
             </Section>
 
-            <Section title="SQL yang dijalankan" description="Salinan SQL persis seperti yang dikirim ke database saat eksekusi ini.">
+            <Section title="SQL yang dijalankan">
                 <SqlEditor value={h.sql_executed} readOnly rows={Math.min(Math.max(h.sql_executed.split("\n").length, 6), 24)} aria-label="SQL yang dijalankan" />
                 <div className="flex justify-end">
                     <Button variant="secondary" onClick={copy}>

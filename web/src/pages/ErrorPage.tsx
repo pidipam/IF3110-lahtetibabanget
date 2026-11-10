@@ -12,19 +12,23 @@ const messages: Record<string, Info> = {
 export function ErrorView({ code, onRetry }: { code: string; onRetry?: () => void }) {
     const info = messages[code] ?? messages["500"];
     return (
-        <div className="mx-auto flex max-w-md flex-col items-center gap-3 px-4 py-16 text-center">
-            <p className="text-sm font-semibold text-indigo-600">{code}</p>
-            <h1 className="text-2xl font-bold text-slate-900">{info.title}</h1>
-            <p className="text-slate-600">{info.message}</p>
-            <div className="mt-4 flex flex-wrap justify-center gap-3">
-                {onRetry && (
-                    <button type="button" onClick={onRetry} className="min-h-10 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
-                        Coba lagi
-                    </button>
-                )}
-                <Link to="/" className="inline-flex min-h-10 items-center rounded-md px-4 py-2 text-sm font-semibold text-slate-700 ring-1 ring-inset ring-slate-300 hover:bg-slate-50">
-                    Kembali ke beranda
-                </Link>
+        <div className="px-4">
+            <section className="hero">
+                <h1>{code}</h1>
+                <p>{info.title}</p>
+            </section>
+            <div className="card mx-auto max-w-[440px] space-y-4 p-6 sm:p-7">
+                <p className="text-slate-900">{info.message}</p>
+                <div className="flex flex-wrap gap-3">
+                    {onRetry && (
+                        <button type="button" onClick={onRetry} className="btn btn-primary">
+                            Coba lagi
+                        </button>
+                    )}
+                    <Link to="/" className="btn btn-secondary">
+                        Kembali ke beranda
+                    </Link>
+                </div>
             </div>
         </div>
     );
@@ -43,7 +47,7 @@ export function RouteErrorPage() {
     const err = useRouteError();
     const code = isRouteErrorResponse(err) ? String(err.status) : "500";
     return (
-        <div className="min-h-screen bg-slate-50">
+        <div className="min-h-screen">
             <ErrorView code={code} />
         </div>
     );

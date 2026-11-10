@@ -10,7 +10,7 @@ import { isApiError } from "../../lib/api";
 import { useCurrentUser } from "../../lib/currentUser";
 import { isInlineError, useCreateMigration, useMigration, useUpdateMigration } from "../../lib/migrations";
 import { canEdit, type Migration, type MigrationInput } from "../../lib/migrations/types";
-import { emptyValues, maxBatchSize, toInput, validate, valuesFrom, type EditorValues } from "../../lib/migrations/validate";
+import { emptyValues, toInput, validate, valuesFrom, type EditorValues } from "../../lib/migrations/validate";
 import { toast } from "../../lib/toast";
 import { ErrorView } from "../ErrorPage";
 import { MockBanner, StatusBadge, databaseName, levelFor } from "./shared";
@@ -71,13 +71,20 @@ type EditorProps = {
     save: (input: MigrationInput, cb: SaveCallbacks) => void;
 };
 
+const errorKey: Record<keyof EditorValues, string> = { title: "title", sqlUp: "sql_up", sqlDown: "sql_down", irreversible: "irreversible_reason", reason: "irreversible_reason", batch: "batch_column", batchColumn: "batch_column", batchSize: "batch_size" };
+
 function MigrationEditor({ title, dbId, migration, initial, back, pending, save }: EditorProps) {
     const me = useCurrentUser();
     const navigate = useNavigate();
     const [v, setV] = useState<EditorValues>(initial);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [formError, setFormError] = useState<string | null>(null);
-    const set = <K extends keyof EditorValues>(key: K, value: EditorValues[K]) => setV((prev) => ({ ...prev, [key]: value }));
+    const set = <K extends keyof EditorValues>(key: K, value: EditorValues[K]) => {
+        setV((prev) => ({ ...prev, [key]: value }));
+        setErrors((prev) => ({ ...prev, [errorKey[key]]: "" }));
+    };
+    const live = validate(v);
+    const shown = (key: string, value: string) => errors[key] || (value.trim() ? live[key] : undefined);
 
     const focusFirst = (errs: Record<string, string>) => {
         const first = fieldOrder.find((f) => errs[f]);
@@ -124,7 +131,7 @@ function MigrationEditor({ title, dbId, migration, initial, back, pending, save 
                 <FormError message={formError} />
                 <Section title="Informasi">
                     <div data-field="title">
-                        <Field label="Judul" error={errors.title} hint="Maksimal 100 karakter.">
+                        <Field label="Judul" error={shown("title", v.title)}>
                             {(p) => <Input {...p} name="title" autoComplete="off" value={v.title} onChange={(e) => set("title", e.target.value)} />}
                         </Field>
                     </div>
@@ -132,20 +139,20 @@ function MigrationEditor({ title, dbId, migration, initial, back, pending, save 
 
                 <Section title="SQL">
                     <div data-field="sql_up">
-                        <Field label="SQL up" error={errors.sql_up} hint="Perubahan yang dijalankan saat migration diterapkan.">
+                        <Field label="SQL up" error={errors.sql_up}>
                             {(p) => <SqlEditor {...p} value={v.sqlUp} onChange={(x) => set("sqlUp", x)} rows={10} placeholder="ALTER TABLE ..." />}
                         </Field>
                     </div>
-                    <Switch label="Irreversible" hint="Aktifkan bila migration tidak bisa dibatalkan dengan SQL down." checked={v.irreversible} onChange={(x) => set("irreversible", x)} />
+                    <Switch label="Irreversible" checked={v.irreversible} onChange={(x) => set("irreversible", x)} />
                     {v.irreversible ? (
                         <div data-field="irreversible_reason">
-                            <Field label="Alasan irreversible" error={errors.irreversible_reason} hint="Wajib diisi. Jelaskan kenapa migration ini tidak bisa di-rollback.">
+                            <Field label="Alasan irreversible" error={errors.irreversible_reason}>
                                 {(p) => <Textarea {...p} name="irreversible_reason" rows={3} value={v.reason} onChange={(e) => set("reason", e.target.value)} />}
                             </Field>
                         </div>
                     ) : (
                         <div data-field="sql_down">
-                            <Field label="SQL down" error={errors.sql_down} hint="Dipakai untuk rollback.">
+                            <Field label="SQL down" error={errors.sql_down}>
                                 {(p) => <SqlEditor {...p} value={v.sqlDown} onChange={(x) => set("sqlDown", x)} rows={8} placeholder="ALTER TABLE ..." />}
                             </Field>
                         </div>
@@ -163,12 +170,12 @@ function MigrationEditor({ title, dbId, migration, initial, back, pending, save 
                     {v.batch && (
                         <div className="grid gap-4 sm:grid-cols-2">
                             <div data-field="batch_column">
-                                <Field label="Kolom batch" error={errors.batch_column} hint="Kolom berurutan untuk membagi baris, misalnya id.">
+                                <Field label="Kolom batch" error={shown("batch_column", v.batchColumn)}>
                                     {(p) => <Input {...p} name="batch_column" autoComplete="off" autoCapitalize="off" spellCheck={false} value={v.batchColumn} onChange={(e) => set("batchColumn", e.target.value)} />}
                                 </Field>
                             </div>
                             <div data-field="batch_size">
-                                <Field label="Ukuran batch" error={errors.batch_size} hint={`Jumlah baris per batch, 1 sampai ${maxBatchSize.toLocaleString("id-ID")}.`}>
+                                <Field label="Ukuran batch" error={shown("batch_size", v.batchSize)}>
                                     {(p) => <Input {...p} name="batch_size" inputMode="numeric" value={v.batchSize} onChange={(e) => set("batchSize", e.target.value)} />}
                                 </Field>
                             </div>

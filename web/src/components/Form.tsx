@@ -1,6 +1,6 @@
 import { useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 
-const control = "block w-full rounded-md border-0 px-3 py-2 text-sm text-slate-900 ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 disabled:bg-slate-50 disabled:text-slate-500 aria-invalid:ring-red-500";
+const control = "field";
 
 type FieldProps = {
     label: string;
@@ -13,8 +13,8 @@ export function Field({ label, error, hint, children }: FieldProps) {
     const id = useId();
     const describedBy = [hint ? `${id}-hint` : "", error ? `${id}-error` : ""].filter(Boolean).join(" ") || undefined;
     return (
-        <div className="space-y-1">
-            <label htmlFor={id} className="block text-sm font-medium text-slate-800">
+        <div className="space-y-1.5">
+            <label htmlFor={id} className="field-label">
                 {label}
             </label>
             {children({ id, "aria-invalid": error ? true : undefined, "aria-describedby": describedBy })}
@@ -53,7 +53,7 @@ export function FormError({ message }: { message?: string | null }) {
         return null;
     }
     return (
-        <div role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 ring-1 ring-inset ring-red-200">
+        <div role="alert" className="alert-error">
             {message}
         </div>
     );

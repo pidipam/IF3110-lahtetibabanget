@@ -49,9 +49,8 @@ export function UsersPage() {
         <div className="space-y-6">
             <PageHeader
                 title="User"
-                description="Kelola akun yang bisa masuk ke platform."
                 actions={
-                    <Link to="/admin/user/baru" className="inline-flex min-h-10 items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
+                    <Link to="/admin/user/baru" className="btn btn-primary">
                         Tambah user
                     </Link>
                 }

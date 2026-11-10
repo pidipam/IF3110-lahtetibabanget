@@ -40,10 +40,10 @@ export function ConfirmDialog({ open, title, children, confirmLabel, danger = fa
                     onClose();
                 }
             }}
-            className="m-auto w-[calc(100%-2rem)] max-w-md rounded-xl bg-white p-0 shadow-xl backdrop:bg-slate-900/40"
+            className="m-auto w-[calc(100%-2rem)] max-w-md rounded-[22px] border border-line bg-[#1b1a1e] p-0 text-slate-900 shadow-xl backdrop:bg-black/60"
         >
             {open && (
-                <div className="space-y-4 p-5">
+                <div className="space-y-4 p-6">
                     <h2 id={`${id}-title`} className="text-lg font-semibold text-slate-900">
                         {title}
                     </h2>

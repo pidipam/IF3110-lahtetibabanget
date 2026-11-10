@@ -172,9 +172,9 @@ export function applyAction(rec: JobRecord, action: JobAction, now: number): { m
             return { message: `Job dijalankan ulang sebagai percobaan ke-${j.attempt}.`, needsApproval: false };
         case "rollback":
             rec.pendingRequest = true;
-            return { message: "Rollback diajukan dan menunggu persetujuan leader Grup.", needsApproval: true };
+            return { message: "Rollback diajukan dan menunggu persetujuan leader grup.", needsApproval: true };
         case "forward":
             rec.pendingRequest = true;
-            return { message: "Forward diajukan dan menunggu persetujuan leader Grup.", needsApproval: true };
+            return { message: "Forward diajukan dan menunggu persetujuan leader grup.", needsApproval: true };
     }
 }

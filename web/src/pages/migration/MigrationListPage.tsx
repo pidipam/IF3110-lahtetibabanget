@@ -61,7 +61,7 @@ export function MigrationListPage() {
                 back={me.databases.length > 1 ? { to: "/migration", label: "Pilih database" } : undefined}
                 actions={
                     level === "edit" ? (
-                        <Link to={`/migration/database/${dbId}/baru`} className="inline-flex min-h-10 items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
+                        <Link to={`/migration/database/${dbId}/baru`} className="btn btn-primary">
                             Buat migration
                         </Link>
                     ) : undefined

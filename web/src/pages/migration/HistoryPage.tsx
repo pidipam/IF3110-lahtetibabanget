@@ -125,7 +125,7 @@ export function HistoryPage() {
             />
             <DatabaseTabs dbId={dbId} />
             <MockBanner />
-            <Checkbox label="Hide rollback" hint="Sembunyikan rollback dan eksekusi yang dibatalkannya." checked={hideRollback} onChange={(e) => setHide(e.target.checked)} />
+            <Checkbox label="Hide rollback" checked={hideRollback} onChange={(e) => setHide(e.target.checked)} />
             {history.isPending ? (
                 <Loading />
             ) : history.isError ? (

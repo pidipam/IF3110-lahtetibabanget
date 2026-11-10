@@ -16,11 +16,14 @@ export function SessionExpiredPage() {
     }, [qc]);
 
     return (
-        <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-            <div className="w-full max-w-sm space-y-4 rounded-xl bg-white p-6 text-center shadow-sm ring-1 ring-slate-200">
-                <h1 className="text-xl font-bold text-slate-900">Sesi berakhir</h1>
-                <p className="text-sm text-slate-600">Sesi Anda sudah berakhir atau dicabut. Silakan login kembali.</p>
-                <Link to="/login" replace state={{ from }} className="inline-flex min-h-10 w-full items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
+        <div className="min-h-screen px-4">
+            <section className="hero pt-10">
+                <h1>401</h1>
+                <p>Sesi Berakhir</p>
+            </section>
+            <div className="card mx-auto max-w-[440px] space-y-4 p-6 sm:p-7">
+                <p className="text-slate-900">Sesi Anda sudah berakhir atau dicabut. Silakan login kembali.</p>
+                <Link to="/login" replace state={{ from }} className="btn btn-primary w-full">
                     Login kembali
                 </Link>
             </div>

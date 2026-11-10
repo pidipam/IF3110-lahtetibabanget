@@ -18,8 +18,8 @@ type ActionText = {
 const texts: Record<JobAction, ActionText> = {
     resume: { label: "Resume", title: "Lanjutkan job?", confirm: "Ya, lanjutkan", danger: false, body: (j) => `Eksekusi dilanjutkan dari batch ke-${j.batches_committed + 1}. Batch yang sudah di-commit tidak dijalankan ulang.` },
     retry: { label: "Retry", title: "Jalankan ulang job?", confirm: "Ya, jalankan ulang", danger: false, body: (j) => `Job dijalankan lagi sebagai percobaan ke-${j.attempt + 1}.` },
-    forward: { label: "Forward", title: "Ajukan forward?", confirm: "Ya, ajukan", danger: false, body: () => "Migration akan diterapkan kembali. Permintaan ini perlu disetujui leader Grup lebih dulu." },
-    rollback: { label: "Rollback", title: "Ajukan rollback?", confirm: "Ya, ajukan rollback", danger: true, body: () => "SQL down akan dijalankan untuk membatalkan perubahan. Permintaan ini perlu disetujui leader Grup lebih dulu." },
+    forward: { label: "Forward", title: "Ajukan forward?", confirm: "Ya, ajukan", danger: false, body: () => "Migration akan diterapkan kembali. Permintaan ini perlu disetujui leader grup lebih dulu." },
+    rollback: { label: "Rollback", title: "Ajukan rollback?", confirm: "Ya, ajukan rollback", danger: true, body: () => "SQL down akan dijalankan untuk membatalkan perubahan. Permintaan ini perlu disetujui leader grup lebih dulu." },
     cancel: { label: "Cancel", title: "Batalkan job?", confirm: "Ya, batalkan", danger: true, body: (j) => (j.is_batch_mode ? "Job dihentikan. Batch yang sudah di-commit tetap tersimpan." : "Job dihentikan sebelum selesai. Transaksi yang belum di-commit dibatalkan.") },
 };
 

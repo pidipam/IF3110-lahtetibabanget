@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { DataTable, type Column } from "../components/DataTable";
+import { Badge } from "../components/Badge";
 import { EmptyState } from "../components/EmptyState";
 import { levelLabel, type DatabaseAccess, type Me } from "../lib/session";
 import { useCurrentUser } from "../lib/currentUser";
@@ -21,28 +22,30 @@ const columns: Column<DatabaseAccess>[] = [
         key: "level",
         header: "Akses",
         nowrap: true,
-        render: (d) => <span className={`rounded px-2 py-0.5 text-xs font-medium ${d.level === "edit" ? "bg-indigo-100 text-indigo-800" : "bg-slate-100 text-slate-700"}`}>{levelLabel(d.level)}</span>,
+        render: (d) => <Badge tone={d.level === "edit" ? "admin" : "neutral"}>{levelLabel(d.level)}</Badge>,
     },
 ];
 
 function emptyText(me: Me) {
     if (me.is_admin) {
-        return "Admin Platform tidak otomatis punya akses database. Tambahkan diri Anda ke Grup yang punya akses bila perlu.";
+        return "Admin Platform tidak otomatis punya akses database. Tambahkan diri Anda ke grup yang punya akses bila perlu.";
     }
-    return "Minta admin menambahkan Anda ke Grup yang punya akses database.";
+    return "Minta admin menambahkan Anda ke grup yang punya akses database.";
 }
 
 export function HomePage() {
     const me = useCurrentUser();
     return (
-        <div className="space-y-6">
-            <div>
-                <h1 className="text-2xl font-bold text-slate-900">Halo, {me.user.username}</h1>
-                <p className="mt-1 text-sm text-slate-600">{me.is_admin ? "Anda masuk sebagai Admin Platform." : "Berikut database yang bisa Anda akses."}</p>
-            </div>
-            <section className="space-y-3">
-                <h2 className="text-lg font-semibold text-slate-900">Database</h2>
-                <DataTable caption="Database yang bisa diakses" columns={columns} rows={me.databases} rowKey={(d) => d.id} minWidth="28rem" empty={<EmptyState title="Belum ada akses database." description={emptyText(me)} />} />
+        <div>
+            <section className="hero">
+                <h1 className="break-words">Halo, {me.user.username}</h1>
+                <p>
+                    Anda masuk sebagai <Badge tone={me.is_admin ? "admin" : "neutral"}>{me.is_admin ? "Platform Admin" : "User"}</Badge>
+                </p>
+            </section>
+            <section className="card space-y-4 p-5 sm:p-7">
+                <h2 className="text-[19px] font-semibold text-slate-900">Database Anda</h2>
+                <DataTable bare caption="Database yang bisa diakses" columns={columns} rows={me.databases} rowKey={(d) => d.id} minWidth="18rem" empty={<EmptyState title="Belum ada akses database." description={emptyText(me)} />} />
             </section>
         </div>
     );

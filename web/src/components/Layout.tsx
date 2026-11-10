@@ -18,11 +18,21 @@ export const navItems: NavItem[] = [
     { to: "/admin/grup", label: "Grup", adminOnly: true },
 ];
 
+export function Logo() {
+    return (
+        <svg className="h-7 w-7 flex-none" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+            <ellipse cx="14" cy="7" rx="10" ry="4" fill="#d9a7cf" />
+            <path d="M4 7v7c0 2.2 4.5 4 10 4s10-1.8 10-4V7c0 2.2-4.5 4-10 4S4 9.2 4 7Z" fill="#f3f1f4" opacity=".85" />
+            <path d="M4 14v7c0 2.2 4.5 4 10 4s10-1.8 10-4v-7c0 2.2-4.5 4-10 4s-10-1.8-10-4Z" fill="#f3f1f4" opacity=".55" />
+        </svg>
+    );
+}
+
 function visibleItems(me: Me) {
     return navItems.filter((i) => !i.adminOnly || me.is_admin);
 }
 
-const linkClass = ({ isActive }: { isActive: boolean }) => `rounded-md px-3 py-2 text-sm font-medium ${isActive ? "bg-indigo-50 text-indigo-700" : "text-slate-700 hover:bg-slate-100"}`;
+const linkClass = ({ isActive }: { isActive: boolean }) => `flex items-center gap-2 rounded-full px-[18px] py-2 text-sm font-medium ${isActive ? "bg-indigo-600 font-semibold text-on-pink" : "text-slate-700 hover:bg-surface-2"}`;
 
 export function Layout({ me }: { me: Me }) {
     const [open, setOpen] = useState(false);
@@ -67,30 +77,30 @@ export function Layout({ me }: { me: Me }) {
     const items = visibleItems(me);
 
     return (
-        <div className="min-h-screen bg-slate-50">
-            <header className="sticky top-0 z-30 border-b border-slate-200 bg-white">
-                <div className="mx-auto flex h-14 max-w-6xl items-center gap-4 px-4">
-                    <button ref={menuButton} type="button" className="-ml-2 rounded-md p-2 text-slate-700 hover:bg-slate-100 md:hidden" aria-label="Buka menu" aria-expanded={open} aria-controls="menu-laci" onClick={() => setOpen(true)}>
-                        <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                            <path d="M4 6h16M4 12h16M4 18h16" strokeLinecap="round" />
-                        </svg>
-                    </button>
-                    <Link to="/" className="truncate font-semibold text-indigo-700">
-                        DBMP
-                    </Link>
-                    <nav aria-label="Navigasi utama" className="hidden flex-1 items-center gap-1 md:flex">
+        <div className="min-h-screen">
+            <header className="relative z-30">
+                <div className="mx-auto flex max-w-[1180px] items-center gap-4 px-4 py-4 md:grid md:grid-cols-[1fr_auto_1fr] md:px-10 md:py-[22px]">
+                    <div className="flex min-w-0 items-center gap-2">
+                        <button ref={menuButton} type="button" className="-ml-2 rounded-full p-2 text-slate-700 hover:bg-surface-2 md:hidden" aria-label="Buka menu" aria-expanded={open} aria-controls="menu-laci" onClick={() => setOpen(true)}>
+                            <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                                <path d="M4 6h16M4 12h16M4 18h16" strokeLinecap="round" />
+                            </svg>
+                        </button>
+                        <Link to="/" className="flex min-w-0 items-center gap-2.5 font-brand text-xl font-bold tracking-tight text-slate-900">
+                            <Logo />
+                            <span className="truncate">lahtetibabanget</span>
+                        </Link>
+                    </div>
+                    <nav aria-label="Navigasi utama" className="hidden items-center gap-1 rounded-full border border-line bg-surface-2 p-[5px] md:flex">
                         {items.map((i) => (
                             <NavLink key={i.to} to={i.to} end={i.end} className={linkClass}>
                                 {i.label}
                             </NavLink>
                         ))}
                     </nav>
-                    <div className="ml-auto hidden items-center gap-3 md:flex">
-                        <span className="text-sm text-slate-600">
-                            {me.user.username}
-                            {me.is_admin && <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">Admin</span>}
-                        </span>
-                        <Button variant="secondary" onClick={onLogout} loading={logout.isPending}>
+                    <div className="hidden items-center justify-end gap-3.5 md:flex">
+                        <span className="truncate text-[15px] font-semibold text-slate-900">{me.user.username}</span>
+                        <Button variant="ghost" onClick={onLogout} loading={logout.isPending}>
                             Keluar
                         </Button>
                     </div>
@@ -99,11 +109,11 @@ export function Layout({ me }: { me: Me }) {
 
             {open && (
                 <div className="fixed inset-0 z-40 md:hidden">
-                    <div className="absolute inset-0 bg-slate-900/40" onClick={() => setOpen(false)} aria-hidden="true" />
-                    <div ref={drawer} id="menu-laci" role="dialog" aria-modal="true" aria-label="Menu" className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-white shadow-xl">
-                        <div className="flex h-14 items-center justify-between border-b border-slate-200 px-4">
-                            <span className="font-semibold text-indigo-700">DBMP</span>
-                            <button type="button" className="rounded-md p-2 text-slate-700 hover:bg-slate-100" aria-label="Tutup menu" onClick={() => setOpen(false)}>
+                    <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} aria-hidden="true" />
+                    <div ref={drawer} id="menu-laci" role="dialog" aria-modal="true" aria-label="Menu" className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r border-line bg-[#141317] shadow-xl">
+                        <div className="flex h-16 items-center justify-between border-b border-line px-4">
+                            <span className="flex items-center gap-2 font-brand text-lg font-bold text-slate-900"><Logo />lahtetibabanget</span>
+                            <button type="button" className="rounded-full p-2 text-slate-700 hover:bg-surface-2" aria-label="Tutup menu" onClick={() => setOpen(false)}>
                                 <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                                     <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
                                 </svg>
@@ -116,12 +126,9 @@ export function Layout({ me }: { me: Me }) {
                                 </NavLink>
                             ))}
                         </nav>
-                        <div className="space-y-3 border-t border-slate-200 p-4">
-                            <p className="truncate text-sm text-slate-600">
-                                Masuk sebagai <span className="font-medium text-slate-800">{me.user.username}</span>
-                                {me.is_admin && " (Admin)"}
-                            </p>
-                            <Button variant="secondary" block onClick={onLogout} loading={logout.isPending}>
+                        <div className="space-y-3 border-t border-line p-4">
+                            <p className="truncate text-[15px] font-semibold text-slate-900">{me.user.username}</p>
+                            <Button variant="ghost" block onClick={onLogout} loading={logout.isPending}>
                                 Keluar
                             </Button>
                         </div>
@@ -129,7 +136,7 @@ export function Layout({ me }: { me: Me }) {
                 </div>
             )}
 
-            <main className="mx-auto max-w-6xl px-4 py-6">
+            <main className="mx-auto max-w-[1080px] px-4 pb-16 pt-4 sm:px-6 sm:pt-7">
                 <Outlet context={me} />
             </main>
         </div>

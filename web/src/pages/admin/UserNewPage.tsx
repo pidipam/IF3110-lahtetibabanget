@@ -7,13 +7,9 @@ import { isApiError } from "../../lib/api";
 import { isInlineError, useCreateUser } from "../../lib/admin";
 import { toast } from "../../lib/toast";
 
-export const usernameHint = "3 sampai 32 karakter: huruf kecil, angka, titik, garis bawah, atau strip.";
-
-export const passwordHint = "Minimal 8 karakter.";
-
 export function checkUsername(value: string): string | undefined {
     if (!/^[a-z0-9_.-]{3,32}$/.test(value.trim().toLowerCase())) {
-        return "Username tidak sesuai aturan.";
+        return "Username 3 sampai 32 karakter: huruf kecil, angka, titik, garis bawah, atau strip.";
     }
     return undefined;
 }
@@ -77,13 +73,13 @@ export function UserNewPage() {
             <Section title="Data user">
                 <form onSubmit={onSubmit} noValidate className="space-y-4">
                     <FormError message={formError} />
-                    <Field label="Username" error={errors.username} hint={usernameHint}>
-                        {(p) => <Input {...p} name="username" autoComplete="off" autoCapitalize="off" value={username} onChange={(e) => setUsername(e.target.value)} autoFocus />}
+                    <Field label="Username" error={errors.username || (username ? checkUsername(username) : undefined)}>
+                        {(p) => <Input {...p} name="username" autoComplete="off" autoCapitalize="off" value={username} onChange={(e) => { setUsername(e.target.value); setErrors((x) => ({ ...x, username: "" })); }} autoFocus />}
                     </Field>
-                    <Field label="Password" error={errors.password} hint={passwordHint}>
-                        {(p) => <Input {...p} name="password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />}
+                    <Field label="Password" error={errors.password || (password ? checkPassword(password) : undefined)}>
+                        {(p) => <Input {...p} name="password" type="password" autoComplete="new-password" value={password} onChange={(e) => { setPassword(e.target.value); setErrors((x) => ({ ...x, password: "" })); }} />}
                     </Field>
-                    <Checkbox label="Jadikan admin" hint="Admin bisa mengelola user, Grup, dan koneksi." checked={isAdmin} onChange={(e) => setIsAdmin(e.target.checked)} />
+                    <Checkbox label="Jadikan admin" checked={isAdmin} onChange={(e) => setIsAdmin(e.target.checked)} />
                     <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                         <Button variant="secondary" onClick={() => navigate("/admin/user")}>
                             Batal

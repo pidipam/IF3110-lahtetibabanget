@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Link, useParams } from "react-router";
+import { useParams } from "react-router";
 import { Badge } from "../../components/Badge";
 import { Loading } from "../../components/Loading";
 import { PageHeader, Section } from "../../components/PageHeader";
@@ -50,7 +50,7 @@ function noticeFor(j: Job): Notice | null {
         case "partial":
             return { tone: "warning", title: "Sebagian batch sudah di-commit", body: `${progress} batch sudah tersimpan di database. Lanjutkan dengan Resume, atau batalkan perubahan dengan Rollback.` };
         case "uncertain":
-            return { tone: "warning", title: "Status tidak pasti", body: "Koneksi terputus saat commit, jadi belum diketahui apakah batch terakhir tersimpan. Periksa data di database sebelum memilih aksi." };
+            return { tone: "warning", title: "Status tidak pasti", body: "Koneksi terputus saat commit sehingga belum diketahui apakah batch terakhir tersimpan. Periksa data di database sebelum memilih aksi." };
         case "partially_reverted":
             return { tone: "warning", title: "Rollback berhenti di tengah", body: "Sebagian perubahan sudah dibatalkan, sebagian belum. Lanjutkan rollback agar database kembali konsisten." };
         case "failed":
@@ -139,7 +139,7 @@ export function JobMonitorPage() {
 
             {j.error_message && (
                 <Section title="Pesan error">
-                    <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-slate-900 p-3 font-mono text-xs text-slate-100">{j.error_message}</pre>
+                    <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-slate-100 p-3 font-mono text-xs text-slate-900">{j.error_message}</pre>
                 </Section>
             )}
 
@@ -159,8 +159,12 @@ export function JobMonitorPage() {
                         )}
                     </Section>
                 </div>
-                <Section title="Waktu">
+                <Section title="Detail">
                     <dl className="grid gap-3">
+                        <div className="min-w-0">
+                            <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">ID job</dt>
+                            <dd className="mt-0.5 break-all font-mono text-sm text-slate-900">{j.job_id}</dd>
+                        </div>
                         <Time label="Masuk antrean" value={j.queued_at} />
                         <Time label="Mulai" value={j.started_at} />
                         <Time label="Selesai" value={j.finished_at} />
@@ -168,13 +172,6 @@ export function JobMonitorPage() {
                 </Section>
             </div>
 
-            <p className="text-sm text-slate-500">
-                Job <span className="break-all font-mono">{j.job_id}</span>. Lihat{" "}
-                <Link to={`/migration/database/${j.database_id}/riwayat`} className="text-indigo-700 hover:underline">
-                    riwayat eksekusi
-                </Link>{" "}
-                database ini.
-            </p>
         </div>
     );
 }

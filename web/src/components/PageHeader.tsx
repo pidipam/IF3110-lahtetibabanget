@@ -21,8 +21,8 @@ export function PageHeader({ title, description, back, actions }: Props) {
             )}
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
-                    <h1 className="break-words text-2xl font-bold text-slate-900">{title}</h1>
-                    {description && <div className="mt-1 text-sm text-slate-600">{description}</div>}
+                    <h1 className="break-words text-[26px] font-bold leading-tight tracking-tight text-slate-900 sm:text-[30px]">{title}</h1>
+                    {description && <div className="mt-1.5 text-[15px] text-slate-500">{description}</div>}
                 </div>
                 {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
             </div>
@@ -39,10 +39,10 @@ type SectionProps = {
 
 export function Section({ title, description, children, danger = false }: SectionProps) {
     return (
-        <section className={`min-w-0 space-y-4 rounded-xl bg-white p-4 shadow-sm ring-1 sm:p-6 ${danger ? "ring-red-200" : "ring-slate-200"}`}>
+        <section className={`card min-w-0 space-y-4 p-5 sm:p-7 ${danger ? "border-red-200" : ""}`}>
             <div>
-                <h2 className={`text-lg font-semibold ${danger ? "text-red-700" : "text-slate-900"}`}>{title}</h2>
-                {description && <p className="mt-1 text-sm text-slate-600">{description}</p>}
+                <h2 className={`text-[19px] font-semibold ${danger ? "text-red-700" : "text-slate-900"}`}>{title}</h2>
+                {description && <p className="mt-1 text-[15px] text-slate-500">{description}</p>}
             </div>
             {children}
         </section>

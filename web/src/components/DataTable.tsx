@@ -16,30 +16,31 @@ type Props<T> = {
     caption?: string;
     empty?: ReactNode;
     minWidth?: string;
+    bare?: boolean;
 };
 
-export function DataTable<T>({ columns, rows, rowKey, caption, empty, minWidth = "40rem" }: Props<T>) {
+export function DataTable<T>({ columns, rows, rowKey, caption, empty, minWidth = "40rem", bare = false }: Props<T>) {
     if (rows.length === 0) {
         return <>{empty ?? <EmptyState title="Belum ada data." />}</>;
     }
     return (
-        <div className="w-full max-w-full overflow-x-auto rounded-lg ring-1 ring-slate-200" tabIndex={0} role="region" aria-label={caption ?? "Tabel"}>
-            <table className="w-full divide-y divide-slate-200 text-left text-sm" style={{ minWidth }}>
+        <div className={`w-full max-w-full overflow-x-auto ${bare ? "" : "card px-3 py-1"}`} tabIndex={0} role="region" aria-label={caption ?? "Tabel"}>
+            <table className="data-table" style={{ minWidth }}>
                 {caption && <caption className="sr-only">{caption}</caption>}
-                <thead className="bg-slate-50">
+                <thead>
                     <tr>
                         {columns.map((c) => (
-                            <th key={c.key} scope="col" className={`whitespace-nowrap px-4 py-3 font-semibold text-slate-700 ${c.className ?? ""}`}>
+                            <th key={c.key} scope="col" className={c.className ?? ""}>
                                 {c.header}
                             </th>
                         ))}
                     </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 bg-white">
+                <tbody>
                     {rows.map((row) => (
-                        <tr key={rowKey(row)} className="hover:bg-slate-50">
+                        <tr key={rowKey(row)}>
                             {columns.map((c) => (
-                                <td key={c.key} className={`px-4 py-3 align-top text-slate-800 ${c.nowrap ? "whitespace-nowrap" : ""} ${c.className ?? ""}`}>
+                                <td key={c.key} className={`text-slate-900 ${c.nowrap ? "whitespace-nowrap" : ""} ${c.className ?? ""}`}>
                                     {c.render(row)}
                                 </td>
                             ))}

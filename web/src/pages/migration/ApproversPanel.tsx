@@ -19,8 +19,6 @@ const stateStyle: Record<ApprovalState, string> = {
     stale: "bg-amber-50 text-amber-900 ring-amber-200",
 };
 
-const levelText = { view: "View Only", edit: "View + Edit" };
-
 type Row = {
     id: number;
     name: string;
@@ -33,6 +31,9 @@ type Row = {
 };
 
 function Message({ tone, children }: { tone: ApprovalState; children: string }) {
+    if (!children.trim()) {
+        return null;
+    }
     return (
         <p role="status" className={`rounded-md px-3 py-2 text-sm ring-1 ring-inset ${stateStyle[tone]}`}>
             {children}
@@ -45,18 +46,17 @@ function GroupList({ rows }: { rows: Row[] }) {
         return null;
     }
     return (
-        <ul aria-label="Approver per Grup" className="divide-y divide-slate-100 rounded-lg ring-1 ring-slate-200">
+        <ul aria-label="Approver per grup" className="divide-y divide-slate-100 rounded-lg ring-1 ring-slate-200">
             {rows.map((r) => (
                 <li key={r.id} className="flex flex-col gap-1 px-3 py-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                         <p className="break-words font-medium text-slate-900">Grup {r.name}</p>
                         <p className="text-sm text-slate-600">
                             {r.leader ? `Leader: ${r.leader.username}` : <span className="text-amber-800">Belum ada leader</span>}
-                            <span className="text-slate-400"> ({levelText[r.level]})</span>
                         </p>
-                        {r.decidedBy && r.decidedAt && (
+                        {r.decision && r.decision !== "pending" && r.decidedAt && (
                             <p className="text-xs text-slate-500">
-                                Diputuskan {r.decidedBy.username}, {formatDateTime(r.decidedAt)}
+                                {decisionInfo[r.decision].label} {formatDateTime(r.decidedAt)}
                             </p>
                         )}
                         {r.reason && <p className="mt-1 break-words text-sm text-red-700">Alasan: {r.reason}</p>}
@@ -79,7 +79,7 @@ export function ApproversPanel({ migration }: { migration: Migration }) {
 
     if (draft) {
         return (
-            <Section title="Approver yang dibutuhkan" description="Leader setiap Grup yang punya akses ke database ini harus menyetujui sebelum migration bisa dijalankan.">
+            <Section title="Approver yang dibutuhkan">
                 {required.isPending ? (
                     <Loading label="Memuat approver..." />
                 ) : required.isError ? (

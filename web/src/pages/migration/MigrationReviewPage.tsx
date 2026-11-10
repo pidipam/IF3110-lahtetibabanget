@@ -1,6 +1,5 @@
 import { useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { Badge } from "../../components/Badge";
 import { Button } from "../../components/Button";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { Loading } from "../../components/Loading";
@@ -72,7 +71,7 @@ function Review({ migration: m, canChange }: { migration: Migration; canChange: 
     const actions = canChange ? (
         <>
             {canEdit(m.status) && (
-                <Link to={`/migration/${m.id}/ubah`} className="inline-flex min-h-10 items-center rounded-md px-4 py-2 text-sm font-semibold text-slate-800 ring-1 ring-inset ring-slate-300 hover:bg-slate-50">
+                <Link to={`/migration/${m.id}/ubah`} className="btn btn-secondary">
                     Ubah
                 </Link>
             )}
@@ -96,8 +95,8 @@ function Review({ migration: m, canChange }: { migration: Migration; canChange: 
                 actions={actions}
             />
             <MockBanner />
-            {!canChange && <p className="text-sm text-slate-600">Anda hanya punya akses View Only, jadi hanya bisa melihat migration ini.</p>}
-            {canChange && m.status === "Pending Review" && <p className="text-sm text-slate-600">Tombol Jalankan muncul setelah semua leader Grup menyetujui.</p>}
+            {!canChange && <p className="text-sm text-slate-600">Anda hanya punya akses View Only sehingga hanya bisa melihat migration ini.</p>}
+            {canChange && m.status === "Pending Review" && <p className="text-sm text-slate-600">Tombol Jalankan muncul setelah semua leader grup menyetujui.</p>}
 
             <Section title="SQL">
                 <div className="grid gap-4 lg:grid-cols-2">
@@ -122,18 +121,15 @@ function Review({ migration: m, canChange }: { migration: Migration; canChange: 
             <div className="grid gap-6 lg:grid-cols-2">
                 <Section title="Detail">
                     <dl className="grid gap-4 sm:grid-cols-2">
-                        <Detail label="Mode">
-                            {rev.is_batch_mode ? (
-                                <span className="inline-flex flex-wrap gap-1">
-                                    <Badge>Batch</Badge>
-                                    <span>
-                                        kolom <span className="font-mono">{rev.batch_column}</span>, {rev.batch_size?.toLocaleString("id-ID")} baris per batch
-                                    </span>
-                                </span>
-                            ) : (
-                                "Normal"
-                            )}
-                        </Detail>
+                        <Detail label="Mode">{rev.is_batch_mode ? "Batch" : "Normal"}</Detail>
+                        {rev.is_batch_mode && (
+                            <>
+                                <Detail label="Kolom batch">
+                                    <span className="font-mono">{rev.batch_column}</span>
+                                </Detail>
+                                <Detail label="Ukuran batch">{rev.batch_size?.toLocaleString("id-ID")} baris</Detail>
+                            </>
+                        )}
                         <Detail label="Dibuat oleh">{m.created_by}</Detail>
                         <Detail label="Revisi dibuat">{formatDateTime(rev.created_at)}</Detail>
                         <Detail label="Terakhir diubah">{formatDateTime(m.updated_at)}</Detail>
@@ -148,7 +144,7 @@ function Review({ migration: m, canChange }: { migration: Migration; canChange: 
             </div>
 
             <ConfirmDialog open={dialog === "submit"} title="Ajukan review?" confirmLabel="Ya, ajukan" loading={submit.isPending} onConfirm={onSubmit} onClose={() => setDialog(null)}>
-                <p>Revisi {rev.revision_number} akan dikirim ke leader Grup untuk disetujui.</p>
+                <p>Revisi {rev.revision_number} akan dikirim ke leader grup untuk disetujui.</p>
                 {required.data && !required.data.ready && <p className="text-amber-800">{required.data.message}</p>}
                 {required.data && required.data.groups.length > 0 && <p>Approver: {required.data.groups.map((g) => (g.leader ? `${g.leader.username} (Grup ${g.group_name})` : `Grup ${g.group_name} tanpa leader`)).join(", ")}.</p>}
             </ConfirmDialog>

@@ -12,8 +12,8 @@ import { useCurrentUser } from "../../lib/currentUser";
 import { meKey } from "../../lib/session";
 import { toast } from "../../lib/toast";
 import { ErrorView } from "../ErrorPage";
-import { checkPassword, checkUsername, passwordHint, usernameHint } from "./UserNewPage";
-import { UserBadges, formatDate } from "./UsersPage";
+import { checkPassword, checkUsername } from "./UserNewPage";
+import { UserBadges } from "./UsersPage";
 
 export function parseId(raw: string | undefined): number | null {
     const id = Number(raw);
@@ -105,14 +105,14 @@ function UserForm({ user }: { user: AdminUserDetail }) {
     };
 
     return (
-        <Section title="Data user" description={`Dibuat ${formatDate(user.created_at)}.`}>
+        <Section title="Data user">
             <form onSubmit={onSubmit} noValidate className="space-y-4">
                 <FormError message={formError} />
-                <Field label="Username" error={errors.username} hint={usernameHint}>
-                    {(p) => <Input {...p} name="username" autoComplete="off" autoCapitalize="off" value={username} onChange={(e) => setUsername(e.target.value)} />}
+                <Field label="Username" error={errors.username || (username ? checkUsername(username) : undefined)}>
+                    {(p) => <Input {...p} name="username" autoComplete="off" autoCapitalize="off" value={username} onChange={(e) => { setUsername(e.target.value); setErrors({}); }} />}
                 </Field>
-                <Checkbox label="Admin" hint={isSelf ? "Anda tidak bisa mencabut hak admin akun sendiri." : "Admin bisa mengelola user, Grup, dan koneksi."} checked={isAdmin} disabled={isSelf} onChange={(e) => setIsAdmin(e.target.checked)} />
-                <Checkbox label="Aktif" hint={isSelf ? "Anda tidak bisa menonaktifkan akun sendiri." : "User nonaktif tidak bisa login."} checked={isActive} disabled={isSelf} onChange={(e) => setIsActive(e.target.checked)} />
+                <Checkbox label="Admin" hint={isSelf ? "Anda tidak bisa mencabut hak admin akun sendiri." : undefined} checked={isAdmin} disabled={isSelf} onChange={(e) => setIsAdmin(e.target.checked)} />
+                <Checkbox label="Aktif" hint={isSelf ? "Anda tidak bisa menonaktifkan akun sendiri." : undefined} checked={isActive} disabled={isSelf} onChange={(e) => setIsActive(e.target.checked)} />
                 <div className="flex justify-end">
                     <Button type="submit" loading={update.isPending && !confirm} disabled={!dirty}>
                         Simpan perubahan
@@ -131,9 +131,9 @@ function UserForm({ user }: { user: AdminUserDetail }) {
 
 function UserGroups({ user }: { user: AdminUserDetail }) {
     return (
-        <Section title="Grup" description="Akses database user berasal dari Grup yang diikutinya.">
+        <Section title="Grup">
             {user.groups.length === 0 ? (
-                <p className="text-sm text-slate-600">User ini belum masuk Grup mana pun.</p>
+                <p className="text-sm text-slate-600">User ini belum masuk grup mana pun.</p>
             ) : (
                 <ul className="flex flex-wrap gap-2">
                     {user.groups.map((g) => (
@@ -193,10 +193,10 @@ function ResetPassword({ user }: { user: AdminUserDetail }) {
     };
 
     return (
-        <Section title="Reset password" description="Semua sesi user akan diakhiri setelah password diganti.">
+        <Section title="Reset password">
             <form onSubmit={onSubmit} noValidate className="space-y-4">
-                <Field label="Password baru" error={error} hint={passwordHint}>
-                    {(p) => <Input {...p} name="new-password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />}
+                <Field label="Password baru" error={error || (password ? checkPassword(password) : undefined)}>
+                    {(p) => <Input {...p} name="new-password" type="password" autoComplete="new-password" value={password} onChange={(e) => { setPassword(e.target.value); setError(undefined); }} />}
                 </Field>
                 <div className="flex justify-end">
                     <Button type="submit" variant="secondary">

@@ -156,7 +156,7 @@ async function approvalFor(m: Migration): Promise<ApprovalStatus | null> {
     const noLeader = groups.filter((g) => g.decision === "pending" && !g.leader).map((g) => g.group_name);
     const waiting = groups.filter((g) => g.decision === "pending" && g.leader).map((g) => g.group_name);
     let state: ApprovalStatus["state"] = "approved";
-    let message = "Semua leader Grup sudah menyetujui.";
+    let message = "Semua leader grup sudah menyetujui.";
     if (groups.length === 0) {
         state = "blocked";
         message = required.message;
@@ -165,7 +165,7 @@ async function approvalFor(m: Migration): Promise<ApprovalStatus | null> {
         message = `Grup ${noLeader.join(", ")} belum punya leader aktif. Minta admin menetapkan leader.`;
     } else if (waiting.length > 0) {
         state = "waiting";
-        message = `Menunggu persetujuan leader Grup ${waiting.join(", ")}.`;
+        message = `Menunggu persetujuan leader grup ${waiting.join(", ")}.`;
     }
     return {
         execution_id: Number(m.id) * 10,

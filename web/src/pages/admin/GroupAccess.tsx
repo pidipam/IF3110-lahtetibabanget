@@ -25,7 +25,7 @@ export function GroupAccess({ group }: { group: AdminGroupDetail }) {
 
     const doSave = () => {
         save.mutate(changes, {
-            onSuccess: () => toast.success("Akses database Grup disimpan."),
+            onSuccess: () => toast.success("Akses database grup disimpan."),
             onError: (err) => {
                 if (isInlineError(err) && isApiError(err)) {
                     setFormError(err.message);
@@ -48,7 +48,7 @@ export function GroupAccess({ group }: { group: AdminGroupDetail }) {
     };
 
     return (
-        <Section title="Akses database" description="Bila anggota punya akses dari beberapa Grup, yang berlaku adalah level tertinggi.">
+        <Section title="Akses database">
             <FormError message={formError} />
             {group.access.length === 0 ? (
                 <p className="text-sm text-slate-600">Belum ada koneksi database. Tambahkan koneksi terlebih dahulu.</p>
@@ -70,7 +70,7 @@ export function GroupAccess({ group }: { group: AdminGroupDetail }) {
                                     id={id}
                                     value={levels[a.db_id]}
                                     onChange={(e) => setLevels({ ...levels, [a.db_id]: e.target.value as GrantLevel })}
-                                    className="block min-h-10 w-full rounded-md border-0 px-3 py-2 text-sm text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:w-44"
+                                    className="field sm:w-48"
                                 >
                                     {(Object.keys(grantLabels) as GrantLevel[]).map((l) => (
                                         <option key={l} value={l}>
@@ -96,8 +96,8 @@ export function GroupAccess({ group }: { group: AdminGroupDetail }) {
             )}
             <ConfirmDialog open={confirm} title="Kurangi akses database?" confirmLabel="Ya, simpan" danger loading={save.isPending} onConfirm={doSave} onClose={() => setConfirm(false)}>
                 <p>Ada akses yang diturunkan atau dicabut.</p>
-                <p>Sesi {group.members.length} anggota Grup ini akan langsung diakhiri.</p>
-                {group.members.some((m) => m.id === me.user.id) && <p>Anda termasuk anggota, jadi Anda juga harus login lagi.</p>}
+                <p>Sesi {group.members.length} anggota grup ini akan langsung diakhiri.</p>
+                {group.members.some((m) => m.id === me.user.id) && <p>Anda termasuk anggota sehingga Anda juga harus login lagi.</p>}
             </ConfirmDialog>
         </Section>
     );
