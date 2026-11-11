@@ -12,6 +12,7 @@ const (
 	ViewDatabase   Action = "database.view"
 	ViewMigration  Action = "migration.view"
 	EditMigration  Action = "migration.edit"
+	ApproveMigration Action = "migration.approve"
 )
 
 type Level int
@@ -34,6 +35,10 @@ type Principal struct {
 type Store interface {
 	GroupLevels(ctx context.Context, userID, dbID int64) ([]Level, error)
 	DatabaseLevels(ctx context.Context, userID int64) (map[int64][]Level, error)
+}
+
+type LeaderStore interface {
+	LeaderGroups(ctx context.Context, userID, dbID int64) ([]int64, error)
 }
 
 var requiredLevel = map[Action]Level{ViewDatabase: LevelView, ViewMigration: LevelView, EditMigration: LevelEdit}
@@ -110,6 +115,16 @@ func (a *Authorizer) Can(ctx context.Context, p Principal, dbID int64, action Ac
 	if action == ManagePlatform {
 		return a.CanManagePlatform(p)
 	}
+	if action == ApproveMigration {
+		groups, err := a.ApproverGroups(ctx, p, dbID)
+		if err != nil {
+			return err
+		}
+		if len(groups) == 0 {
+			return ErrForbidden
+		}
+		return nil
+	}
 	if _, ok := requiredLevel[action]; !ok {
 		return ErrUnknownAction
 	}
@@ -135,4 +150,12 @@ func (a *Authorizer) AccessibleDatabases(ctx context.Context, p Principal) (map[
 		}
 	}
 	return out, nil
+}
+
+func (a *Authorizer) ApproverGroups(ctx context.Context, p Principal, dbID int64) ([]int64, error) {
+	ls, ok := a.store.(LeaderStore)
+	if !ok {
+		return nil, nil
+	}
+	return ls.LeaderGroups(ctx, p.UserID, dbID)
 }

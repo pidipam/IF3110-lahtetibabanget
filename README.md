@@ -5,8 +5,7 @@ Tugas Besar IF3110 Pengembangan Aplikasi Web 2026
 
 Platform web untuk mengelola akses dan perubahan schema database bersama (PostgreSQL, dengan
 dukungan tambahan MySQL/MariaDB): akses diatur per grup, struktur dan data dapat dijelajahi, dan
-setiap perubahan dilakukan lewat migration yang tercatat. Tugas Besar IF3110 Pengembangan Aplikasi
-Web 2026, Milestone 1.
+setiap perubahan dilakukan lewat migration yang tercatat.
 
 ## Fitur
 
@@ -53,6 +52,27 @@ dibuat otomatis saat server mulai. `make down` mematikan container; data tetap t
 volume. Untuk menghapus semua data (termasuk akun admin) jalankan `docker compose down -v`.
 
 `make run` membaca file `.env` bila ada (lihat `.env.example`; jangan di-commit).
+
+### SPA
+
+SPA ada di `web/` (Vite, React, TypeScript, Tailwind) dan butuh Node.js 20 atau lebih baru.
+
+```bash
+make web-build # build ke web/dist, hasilnya di-embed ke binary Go
+make run # buka http://localhost:8080/app/
+```
+
+Saat development, jalankan `make web-dev` di terminal lain lalu buka http://localhost:5173/app/.
+Vite meneruskan `/api` ke `:8080` sehingga cookie sesi tetap satu origin.
+
+### Persetujuan migration
+
+Setiap eksekusi migration harus disetujui leader dari setiap grup yang punya akses ke database tujuan.
+
+- Grup tanpa leader aktif menahan proses.
+- Pengaju tidak boleh menyetujui permintaannya sendiri.
+- Persetujuan terikat pada revisi. Bila migration diubah, persetujuan lama tidak berlaku.
+- Satu penolakan menolak permintaan.
 
 ### Konfigurasi (environment)
 

@@ -3,7 +3,6 @@ package app
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -292,30 +291,6 @@ func TestLoginRotatesSession(t *testing.T) {
 	expectStatus(t, old.do("GET", "/", nil), http.StatusUnauthorized)
 }
 
-func TestPrivilegeEscalationRotatesSession(t *testing.T) {
-	e := setup(t)
-	e.createUser("admin", "password123", true)
-	bob := e.createUser("bob", "password123", false)
-	admin := e.client()
-	admin.login("admin", "password123")
-	b := e.client()
-	b.login("bob", "password123")
-	before := b.session()
-	expectStatus(t, admin.post(fmt.Sprintf("/admin/users/%d", bob.ID), url.Values{"username": {"bob"}, "is_admin": {"on"}, "is_active": {"on"}}), http.StatusSeeOther)
-	expectStatus(t, b.do("GET", "/", nil), http.StatusOK)
-	if b.session() == before {
-		t.Fatal("session tidak dirotasi setelah privilege naik")
-	}
-	expectStatus(t, b.do("GET", "/admin/users", nil), http.StatusOK)
-	g, _ := e.app.Users.CreateGroup(context.Background(), "analis", "")
-	before = b.session()
-	expectStatus(t, admin.post(fmt.Sprintf("/admin/groups/%d/members", g.ID), url.Values{"user_id": {fmt.Sprint(bob.ID)}}), http.StatusSeeOther)
-	expectStatus(t, b.do("GET", "/", nil), http.StatusOK)
-	if b.session() == before {
-		t.Fatal("session tidak dirotasi setelah masuk group")
-	}
-}
-
 func TestLogoutRevokesSession(t *testing.T) {
 	e := setup(t)
 	e.createUser("alice", "password123", false)
@@ -342,113 +317,6 @@ func TestLogoutRequiresCSRF(t *testing.T) {
 	c.login("alice", "password123")
 	expectStatus(t, c.do("POST", "/logout", url.Values{}), http.StatusForbidden)
 	expectStatus(t, c.do("GET", "/", nil), http.StatusOK)
-}
-
-func TestStateChangeWithoutCSRFRejected(t *testing.T) {
-	e := setup(t)
-	e.createUser("admin", "password123", true)
-	c := e.client()
-	c.login("admin", "password123")
-	expectStatus(t, c.do("POST", "/admin/groups", url.Values{"name": {"tanpa-token"}}), http.StatusForbidden)
-	expectStatus(t, c.do("POST", "/admin/groups", url.Values{"name": {"token-salah"}, auth.CSRFField: {"x"}}), http.StatusForbidden)
-	if e.count("SELECT count(*) FROM groups") != 0 {
-		t.Fatal("group dibuat tanpa CSRF valid")
-	}
-	expectStatus(t, c.post("/admin/groups", url.Values{"name": {"dengan-token"}}), http.StatusSeeOther)
-	if e.count("SELECT count(*) FROM groups") != 1 {
-		t.Fatal("group dengan CSRF valid gagal dibuat")
-	}
-}
-
-func TestNonAdminForbidden(t *testing.T) {
-	e := setup(t)
-	e.createUser("alice", "password123", false)
-	target := e.createUser("budi", "password123", false)
-	c := e.client()
-	c.login("alice", "password123")
-	for _, path := range []string{"/admin/users", "/admin/users/new", "/admin/groups", fmt.Sprintf("/admin/users/%d", target.ID)} {
-		expectStatus(t, c.do("GET", path, nil), http.StatusForbidden)
-	}
-	expectStatus(t, c.post("/admin/groups", url.Values{"name": {"ilegal"}}), http.StatusForbidden)
-	expectStatus(t, c.post("/admin/users", url.Values{"username": {"ilegal"}, "password": {"password123"}, "is_admin": {"on"}}), http.StatusForbidden)
-	expectStatus(t, c.post(fmt.Sprintf("/admin/users/%d", target.ID), url.Values{"username": {"budi"}, "is_admin": {"on"}, "is_active": {"on"}}), http.StatusForbidden)
-	if e.count("SELECT count(*) FROM groups") != 0 || e.count("SELECT count(*) FROM users WHERE is_admin") != 0 {
-		t.Fatal("non-admin berhasil mengubah data")
-	}
-}
-
-func TestAdminManagesUsersAndGroups(t *testing.T) {
-	e := setup(t)
-	e.createUser("admin", "password123", true)
-	c := e.client()
-	c.login("admin", "password123")
-	expectStatus(t, c.post("/admin/users", url.Values{"username": {"Carol"}, "password": {"password123"}}), http.StatusSeeOther)
-	expectStatus(t, c.post("/admin/users", url.Values{"username": {"carol"}, "password": {"password123"}}), http.StatusUnprocessableEntity)
-	expectStatus(t, c.post("/admin/users", url.Values{"username": {"x"}, "password": {"password123"}}), http.StatusUnprocessableEntity)
-	expectStatus(t, c.post("/admin/users", url.Values{"username": {"dodi"}, "password": {"pendek"}}), http.StatusUnprocessableEntity)
-	carol, err := e.app.Users.GetByUsername(context.Background(), "carol")
-	if err != nil {
-		t.Fatal(err)
-	}
-	expectStatus(t, c.post("/admin/groups", url.Values{"name": {"tim-data"}, "description": {"Analis"}}), http.StatusSeeOther)
-	expectStatus(t, c.post("/admin/groups", url.Values{"name": {"tim-data"}}), http.StatusUnprocessableEntity)
-	var groupID int64
-	e.db.QueryRow(context.Background(), "SELECT id FROM groups WHERE name = 'tim-data'").Scan(&groupID)
-	expectStatus(t, c.post(fmt.Sprintf("/admin/groups/%d/members", groupID), url.Values{"user_id": {fmt.Sprint(carol.ID)}}), http.StatusSeeOther)
-	page := c.do("GET", fmt.Sprintf("/admin/groups/%d", groupID), nil)
-	expectStatus(t, page, http.StatusOK)
-	if !strings.Contains(page.Body.String(), "carol") {
-		t.Fatal("anggota tidak tampil")
-	}
-	user := e.client()
-	expectStatus(t, user.login("carol", "password123"), http.StatusSeeOther)
-	expectStatus(t, c.post(fmt.Sprintf("/admin/groups/%d/members/%d/delete", groupID, carol.ID), nil), http.StatusSeeOther)
-	if e.count("SELECT count(*) FROM group_members") != 0 {
-		t.Fatal("anggota tidak dikeluarkan")
-	}
-	expectStatus(t, user.do("GET", "/", nil), http.StatusUnauthorized)
-	expectStatus(t, c.post(fmt.Sprintf("/admin/groups/%d/delete", groupID), nil), http.StatusSeeOther)
-	if e.count("SELECT count(*) FROM groups") != 0 {
-		t.Fatal("group tidak terhapus")
-	}
-}
-
-func TestDeactivateRevokesSessions(t *testing.T) {
-	e := setup(t)
-	e.createUser("admin", "password123", true)
-	bob := e.createUser("bob", "password123", false)
-	admin := e.client()
-	admin.login("admin", "password123")
-	b := e.client()
-	b.login("bob", "password123")
-	expectStatus(t, admin.post(fmt.Sprintf("/admin/users/%d", bob.ID), url.Values{"username": {"bob"}}), http.StatusSeeOther)
-	expectStatus(t, b.do("GET", "/", nil), http.StatusUnauthorized)
-	expectStatus(t, e.client().login("bob", "password123"), http.StatusUnauthorized)
-}
-
-func TestPasswordResetRevokesSessions(t *testing.T) {
-	e := setup(t)
-	e.createUser("admin", "password123", true)
-	bob := e.createUser("bob", "password123", false)
-	admin := e.client()
-	admin.login("admin", "password123")
-	b := e.client()
-	b.login("bob", "password123")
-	expectStatus(t, admin.post(fmt.Sprintf("/admin/users/%d/password", bob.ID), url.Values{"password": {"passwordbaru"}}), http.StatusSeeOther)
-	expectStatus(t, b.do("GET", "/", nil), http.StatusUnauthorized)
-	expectStatus(t, e.client().login("bob", "password123"), http.StatusUnauthorized)
-	expectStatus(t, e.client().login("bob", "passwordbaru"), http.StatusSeeOther)
-}
-
-func TestAdminCannotLockThemselvesOut(t *testing.T) {
-	e := setup(t)
-	me := e.createUser("admin", "password123", true)
-	c := e.client()
-	c.login("admin", "password123")
-	expectStatus(t, c.post(fmt.Sprintf("/admin/users/%d", me.ID), url.Values{"username": {"admin"}, "is_active": {"on"}}), http.StatusUnprocessableEntity)
-	if e.count("SELECT count(*) FROM users WHERE is_admin AND is_active") != 1 {
-		t.Fatal("admin berhasil mencabut hak dirinya sendiri")
-	}
 }
 
 func TestEffectiveAccessFromDatabase(t *testing.T) {

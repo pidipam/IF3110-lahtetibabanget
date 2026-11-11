@@ -8,12 +8,14 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/approval"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/auth"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/authz"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/dbconn"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/migration"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/users"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/web"
+	webui "github.com/pidipam/IF3110-lahtetibabanget/web"
 )
 
 type Options struct {
@@ -39,9 +41,10 @@ type App struct {
 	handler       http.Handler
 	Migrations    *migration.Service
 	migrationExec *migration.Executor
+	Approvals *approval.Service
 }
 
-var notices = map[string]string{"user_created": "User berhasil dibuat.", "user_updated": "User berhasil diperbarui.", "password_reset": "Password berhasil direset dan semua sesi user tersebut diakhiri.", "group_created": "Grup berhasil dibuat.", "group_updated": "Grup berhasil diperbarui.", "group_deleted": "Grup berhasil dihapus.", "member_added": "Anggota berhasil ditambahkan.", "member_removed": "Anggota berhasil dikeluarkan.", "connection_created": "Koneksi database berhasil dibuat.", "connection_updated": "Koneksi database berhasil diperbarui.", "connection_deleted": "Koneksi database berhasil dihapus.", "access_updated": "Akses database grup berhasil diperbarui."}
+var notices = map[string]string{"connection_created": "Koneksi database berhasil dibuat.", "connection_updated": "Koneksi database berhasil diperbarui.", "connection_deleted": "Koneksi database berhasil dihapus.", "access_updated": "Akses database grup berhasil diperbarui."}
 
 func New(opt Options) (*App, error) {
 	rd, err := web.NewRenderer()
@@ -69,8 +72,9 @@ func New(opt Options) (*App, error) {
 		getSQL: a.Manager.GetSQL,
 	}, 0)
 	a.Migrations = migration.NewService(repo, a.migrationExec, a.Authz)
+	a.Approvals = approval.NewService(opt.DB, a.Authz)
 	a.routes()
-	a.handler = securityHeaders(a.logRequests(a.Auth.LoadSession(a.mux)))
+	a.handler = securityHeaders(a.logRequests(withSPA(webui.Handler(), a.Auth.LoadSession(a.mux))))
 	return a, nil
 }
 
@@ -98,8 +102,6 @@ func navOf(path string) string {
 	switch {
 	case path == "/":
 		return "home"
-	case strings.HasPrefix(path, "/admin/users"):
-		return "users"
 	case strings.HasPrefix(path, "/admin/groups"):
 		return "groups"
 	case strings.HasPrefix(path, "/admin/connections"):
@@ -126,6 +128,21 @@ func (a *App) logRequests(next http.Handler) http.Handler {
 		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(sw, r)
 		a.Logger.Info("request", "method", r.Method, "path", r.URL.Path, "status", sw.status, "duration", time.Since(start))
+	})
+}
+
+func withSPA(spa, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		safe := r.Method == http.MethodGet || r.Method == http.MethodHead
+		if safe && r.URL.Path == strings.TrimSuffix(webui.Base, "/") {
+			http.Redirect(w, r, webui.Base, http.StatusMovedPermanently)
+			return
+		}
+		if safe && strings.HasPrefix(r.URL.Path, webui.Base) {
+			spa.ServeHTTP(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
 	})
 }
 

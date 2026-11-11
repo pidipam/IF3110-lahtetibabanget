@@ -2,6 +2,8 @@ module github.com/pidipam/IF3110-lahtetibabanget
 
 go 1.27.1
 
+ignore ./web/node_modules
+
 require (
 	github.com/go-sql-driver/mysql v1.10.1
 	github.com/jackc/pgx/v5 v5.11.0

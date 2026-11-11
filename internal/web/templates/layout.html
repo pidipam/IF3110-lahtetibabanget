@@ -89,8 +89,8 @@
                         <a href="/"{{if eq .Nav "home"}} class="active"{{end}}>Beranda</a>
                         <a href="/databases"{{if eq .Nav "databases"}} class="active"{{end}}>Database</a>
                         {{if .User.IsAdmin}}
-                            <a href="/admin/users"{{if eq .Nav "users"}} class="active"{{end}}>User</a>
-                            <a href="/admin/groups"{{if eq .Nav "groups"}} class="active"{{end}}>Grup</a>
+                            <a href="/app/admin/user">User</a>
+                            <a href="/app/admin/grup"{{if eq .Nav "groups"}} class="active"{{end}}>Grup</a>
                             <a href="/admin/connections"{{if eq .Nav "connections"}} class="active"{{end}}>Koneksi</a>
                         {{end}}
                     </nav>
