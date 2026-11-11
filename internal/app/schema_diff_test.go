@@ -169,7 +169,7 @@ func TestSchemaDiffAccessControl(t *testing.T) {
 
 	w := f.ed.do("GET", f.base, nil)
 	expectStatus(t, w, http.StatusOK)
-	contains(t, w.Body.String(), "Schema diff", `name="desired_ddl"`, "DDL kondisi yang diinginkan", "Lihat DDL kondisi saat ini", "CREATE TABLE")
+	contains(t, w.Body.String(), "Schema diff", `name="desired_ddl"`, "Kondisi DDL yang diinginkan", "Lihat kondisi DDL saat ini", "CREATE TABLE")
 	contains(t, f.ed.do("GET", fmt.Sprintf("/databases/%d", f.conn.ID), nil).Body.String(), "Schema diff")
 
 	expectStatus(t, f.ed.do("GET", "/databases/abc/schema-diff", nil), http.StatusNotFound)
