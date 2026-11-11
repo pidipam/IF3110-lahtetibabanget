@@ -58,15 +58,12 @@ volume. Untuk menghapus semua data (termasuk akun admin) jalankan `docker compos
 SPA ada di `web/` (Vite, React, TypeScript, Tailwind) dan butuh Node.js 20 atau lebih baru.
 
 ```bash
-make web-build   # build ke web/dist, hasilnya di-embed ke binary Go
-make run         # buka http://localhost:8080/app/
+make web-build # build ke web/dist, hasilnya di-embed ke binary Go
+make run # buka http://localhost:8080/app/
 ```
 
 Saat development, jalankan `make web-dev` di terminal lain lalu buka http://localhost:5173/app/.
 Vite meneruskan `/api` ke `:8080` sehingga cookie sesi tetap satu origin.
-
-Halaman migration masih memakai data contoh sampai API migration tersedia. Build dengan
-`VITE_MIGRATION_API=http` untuk memakai API sungguhan.
 
 ### Persetujuan migration
 
