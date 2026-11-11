@@ -45,6 +45,7 @@ type Service struct {
 	db *pgxpool.Pool
 	authz Approvers
 	OnApproved func(ctx context.Context, execID int64)
+	OnRejected func(ctx context.Context, execID int64)
 }
 
 func NewService(db *pgxpool.Pool, az Approvers) *Service {
@@ -214,6 +215,9 @@ func (s *Service) decide(ctx context.Context, p authz.Principal, migrationID int
 	}
 	if after.State == StateApproved && s.OnApproved != nil {
 		s.OnApproved(ctx, exec.ID)
+	}
+	if after.State == StateRejected && s.OnRejected != nil {
+		s.OnRejected(ctx, exec.ID)
 	}
 	return after, nil
 }
