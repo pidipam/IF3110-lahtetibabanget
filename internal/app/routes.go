@@ -35,6 +35,7 @@ func (a *App) routes() {
 	a.mux.Handle("GET /databases/{id}/tables/{schema}/{table}", login(a.databaseTable))
 	a.migrationRoutes()
 	a.schemaDiffRoutes()
+	a.workflowRoutes()
 	(&sessionapi.Handler{Users: a.Users, Sessions: a.Sessions, Auth: a.Auth, Authz: a.Authz, Conns: a.Conns, Logger: a.Logger}).RegisterRoutes(a.mux, a.Auth.RequireLogin)
 	(&adminapi.Handler{Users: a.Users, Sessions: a.Sessions, Auth: a.Auth, Grants: a.Grants, GrantStore: a.GrantStore, Conns: a.Conns, Logger: a.Logger}).RegisterRoutes(a.mux, a.Auth.RequireAdmin)
 	(&approvalapi.Handler{Approvals: a.Approvals, Authz: a.Authz, Logger: a.Logger}).RegisterRoutes(a.mux, a.Auth.RequireLogin)

@@ -13,6 +13,9 @@ import (
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/authz"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/dbconn"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/migration"
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/migration/exec"
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/migration/spaapi"
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/migration/workflow"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/users"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/web"
 	webui "github.com/pidipam/IF3110-lahtetibabanget/web"
@@ -24,6 +27,7 @@ type Options struct {
 	Secure        bool
 	Logger        *slog.Logger
 	EncryptionKey []byte
+	Queue         workflow.Queue // antrean Vara; nil = antrean lokal sementara
 }
 
 type App struct {
@@ -42,6 +46,9 @@ type App struct {
 	Migrations    *migration.Service
 	migrationExec *migration.Executor
 	Approvals *approval.Service
+	Workflow      *workflow.Service
+	wfHandler     *exec.Handler
+	wfAPI         *spaapi.Handler
 }
 
 var notices = map[string]string{"connection_created": "Koneksi database berhasil dibuat.", "connection_updated": "Koneksi database berhasil diperbarui.", "connection_deleted": "Koneksi database berhasil dihapus.", "access_updated": "Akses database grup berhasil diperbarui."}
@@ -66,13 +73,15 @@ func New(opt Options) (*App, error) {
 	a.GrantStore = dbconn.NewGrantStore(opt.DB)
 	a.Grants = &dbconn.GrantService{Repo: a.GrantStore, Sessions: a.Sessions}
 	repo := migration.NewRepository(opt.DB)
-	a.migrationExec = migration.NewExecutor(opt.DB, repo, managerTargets{
+	targets := managerTargets{
 		db:     opt.DB,
 		get:    func(ctx context.Context, id int64) (*pgxpool.Pool, error) { return a.Manager.Get(ctx, id) },
 		getSQL: a.Manager.GetSQL,
-	}, 0)
+	}
+	a.migrationExec = migration.NewExecutor(opt.DB, repo, targets, 0)
 	a.Migrations = migration.NewService(repo, a.migrationExec, a.Authz)
 	a.Approvals = approval.NewService(opt.DB, a.Authz)
+	a.initWorkflow(opt, targets)
 	a.routes()
 	a.handler = securityHeaders(a.logRequests(withSPA(webui.Handler(), a.Auth.LoadSession(a.mux))))
 	return a, nil
