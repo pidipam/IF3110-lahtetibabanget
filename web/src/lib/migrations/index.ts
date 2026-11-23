@@ -5,7 +5,7 @@ import { httpClient } from "./httpClient";
 import { mockClient } from "./mockClient";
 import { pollInterval, type HistoryQuery, type JobAction, type Migration, type MigrationInput } from "./types";
 
-export const migrationClient: MigrationClient = import.meta.env.VITE_MIGRATION_API === "http" ? httpClient : mockClient;
+export const migrationClient: MigrationClient = import.meta.env.VITE_MIGRATION_API === "mock" ? mockClient : httpClient;
 
 export const isMock = migrationClient.mode === "mock";
 
