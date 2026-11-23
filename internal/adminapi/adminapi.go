@@ -231,6 +231,6 @@ func (h *Handler) loadGroup(w http.ResponseWriter, r *http.Request) (*users.Grou
 }
 
 func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error) {
-	h.Logger.Error("request failed", "method", r.Method, "path", r.URL.Path, "err", err)
+	h.Logger.Error("request failed", "method", r.Method, "path", httpapi.LogPath(r), "err", err)
 	httpapi.Internal(w)
 }

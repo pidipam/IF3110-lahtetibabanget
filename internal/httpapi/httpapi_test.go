@@ -105,3 +105,11 @@ func TestPathID(t *testing.T) {
 		}
 	}
 }
+
+func TestLogPathStripsLineBreaks(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/api/me", nil)
+	r.URL.Path = "/api/me\n{\"level\":\"ERROR\"}\r"
+	if got := LogPath(r); strings.ContainsAny(got, "\r\n") || got != "/api/me{\"level\":\"ERROR\"}" {
+		t.Fatalf("got %q", got)
+	}
+}

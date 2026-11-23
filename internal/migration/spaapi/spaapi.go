@@ -144,7 +144,7 @@ func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error) {
 		httpapi.Invalid(w, msg, map[string]string{workflow.ValidationField(err): msg})
 	case !known:
 		if h.Svc.Log != nil {
-			h.Svc.Log.Error("api.error", "event", "api.error", "path", r.URL.Path, "error", err.Error())
+			h.Svc.Log.Error("api.error", "event", "api.error", "path", httpapi.LogPath(r), "error", err.Error())
 		}
 		httpapi.Internal(w)
 	default:

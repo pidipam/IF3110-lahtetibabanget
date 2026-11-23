@@ -115,7 +115,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux, requireLogin func(http.Hand
 }
 
 func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error) {
-	h.Logger.Error("request failed", "method", r.Method, "path", r.URL.Path, "error", err.Error())
+	h.Logger.Error("request failed", "method", r.Method, "path", httpapi.LogPath(r), "error", err.Error())
 	httpapi.Internal(w)
 }
 

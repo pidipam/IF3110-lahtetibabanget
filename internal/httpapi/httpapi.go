@@ -41,6 +41,10 @@ type errorEnvelope struct {
 	Error ErrorBody `json:"error"`
 }
 
+func LogPath(r *http.Request) string {
+	return strings.ReplaceAll(strings.ReplaceAll(r.URL.Path, "\n", ""), "\r", "")
+}
+
 func IsAPI(r *http.Request) bool {
 	return r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, Prefix)
 }

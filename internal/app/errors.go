@@ -40,7 +40,7 @@ func (a *App) forbidden(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) fail(w http.ResponseWriter, r *http.Request, err error) {
-	a.Logger.Error("request failed", "method", r.Method, "path", r.URL.Path, "err", err)
+	a.Logger.Error("request failed", "method", r.Method, "path", httpapi.LogPath(r), "err", err)
 	if httpapi.IsAPI(r) {
 		httpapi.Internal(w)
 		return
