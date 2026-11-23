@@ -65,6 +65,19 @@ make run # buka http://localhost:8080/app/
 Saat development, jalankan `make web-dev` di terminal lain lalu buka http://localhost:5173/app/.
 Vite meneruskan `/api` ke `:8080` sehingga cookie sesi tetap satu origin.
 
+Halaman koneksi, viewer, dan persetujuan memakai API JSON yang sama dengan server:
+
+| Halaman | Rute SPA | API |
+|---|---|---|
+| Koneksi (admin) | `/app/admin/koneksi`, `/app/admin/koneksi/baru`, `/app/admin/koneksi/{id}` | `/api/admin/connections` dan `/api/admin/connections/test` |
+| Database | `/app/database`, `/app/database/{id}` | `/api/databases` dan `/api/databases/{id}` |
+| Viewer tabel | `/app/database/{id}?schema=...&table=...&page=...` | `/api/databases/{id}/tables/{schema}/{table}` |
+| Persetujuan leader | `/app/persetujuan` | `/api/approvals?mine=true`, `/api/migrations/{id}/approve`, `/api/migrations/{id}/reject` |
+
+Form koneksi memiliki tombol uji koneksi; password tidak pernah dikirim kembali ke browser. Viewer
+menampilkan NULL, sel terpotong, paginasi, dan scroll horizontal. Database target yang mati
+mengarahkan ke halaman `/app/error/503`.
+
 ### Persetujuan migration
 
 Setiap eksekusi migration harus disetujui leader dari setiap grup yang punya akses ke database tujuan.

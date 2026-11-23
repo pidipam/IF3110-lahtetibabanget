@@ -8,6 +8,11 @@ import { ErrorPage, ErrorView, NotFoundPage, RouteErrorPage } from "./pages/Erro
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
 import { SessionExpiredPage } from "./pages/SessionExpiredPage";
+import { ApprovalsPage } from "./pages/approval/ApprovalsPage";
+import { DatabaseDetailPage } from "./pages/database/DatabaseDetailPage";
+import { DatabasesPage } from "./pages/database/DatabasesPage";
+import { ConnectionFormPage } from "./pages/admin/ConnectionFormPage";
+import { ConnectionsPage } from "./pages/admin/ConnectionsPage";
 import { GroupNewPage } from "./pages/admin/GroupNewPage";
 import { GroupPage } from "./pages/admin/GroupPage";
 import { GroupsPage } from "./pages/admin/GroupsPage";
@@ -61,6 +66,9 @@ export const router = createBrowserRouter(
                     element: <RequireAuth />,
                     children: [
                         { index: true, element: <HomePage /> },
+                        { path: "/database", element: <DatabasesPage /> },
+                        { path: "/database/:dbId", element: <DatabaseDetailPage /> },
+                        { path: "/persetujuan", element: <ApprovalsPage /> },
                         { path: "/migration", element: <DatabasePickerPage /> },
                         { path: "/migration/database/:dbId", element: <MigrationListPage /> },
                         { path: "/migration/database/:dbId/baru", element: <MigrationNewPage /> },
@@ -74,6 +82,9 @@ export const router = createBrowserRouter(
                             element: <RequireAdmin />,
                             children: [
                                 { index: true, element: <Navigate to="/admin/user" replace /> },
+                                { path: "koneksi", element: <ConnectionsPage /> },
+                                { path: "koneksi/baru", element: <ConnectionFormPage mode="new" /> },
+                                { path: "koneksi/:id", element: <ConnectionFormPage mode="edit" /> },
                                 { path: "user", element: <UsersPage /> },
                                 { path: "user/baru", element: <UserNewPage /> },
                                 { path: "user/:id", element: <UserEditPage /> },
