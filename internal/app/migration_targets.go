@@ -10,12 +10,23 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/dbconn"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/migration"
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/migration/exec"
 )
 
 type managerTargets struct {
 	db     *pgxpool.Pool
 	get    func(ctx context.Context, id int64) (*pgxpool.Pool, error)
 	getSQL func(ctx context.Context, id int64) (*sql.DB, error)
+}
+
+func NewManagerTargets(db *pgxpool.Pool, encryptionKey []byte) (exec.Targets, func(), error) {
+	cipher, err := dbconn.NewCipher(encryptionKey)
+	if err != nil {
+		return nil, nil, err
+	}
+	manager := dbconn.NewManager(dbconn.NewStore(db, cipher))
+	targets := managerTargets{db: db, get: manager.Get, getSQL: manager.GetSQL}
+	return targets, manager.Close, nil
 }
 
 func (t managerTargets) Pool(ctx context.Context, id int64) (*pgxpool.Pool, error) {
@@ -40,7 +51,6 @@ func (t managerTargets) Name(ctx context.Context, id int64) (string, error) {
 	return name, err
 }
 
-// RecoverMigrations menandai migration yang tertinggal berstatus running sebagai failed.
 func (a *App) RecoverMigrations(ctx context.Context) (int64, error) {
 	if a.migrationExec == nil {
 		return 0, nil
