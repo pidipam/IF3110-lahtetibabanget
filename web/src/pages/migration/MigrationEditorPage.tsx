@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useLocation, useNavigate, useParams } from "react-router";
 import { Button } from "../../components/Button";
 import { Field, FormError, Input, Textarea, fieldErrors } from "../../components/Form";
 import { Loading } from "../../components/Loading";
@@ -13,6 +13,7 @@ import { canEdit, type Migration, type MigrationInput } from "../../lib/migratio
 import { emptyValues, toInput, validate, valuesFrom, type EditorValues } from "../../lib/migrations/validate";
 import { toast } from "../../lib/toast";
 import { ErrorView } from "../ErrorPage";
+import type { MigrationDraft } from "./SchemaDiffPage";
 import { MockBanner, StatusBadge, databaseName, levelFor } from "./shared";
 
 const fieldOrder = ["title", "sql_up", "sql_down", "irreversible_reason", "batch_column", "batch_size"];
@@ -21,10 +22,12 @@ export function MigrationNewPage() {
     const { dbId = "" } = useParams();
     const me = useCurrentUser();
     const create = useCreateMigration(dbId);
+    const draft = (useLocation().state as { draft?: MigrationDraft } | null)?.draft;
     if (levelFor(me, dbId) !== "edit") {
         return <ErrorView code="403" />;
     }
-    return <MigrationEditor title="Buat migration" dbId={dbId} initial={emptyValues} back={`/migration/database/${dbId}`} pending={create.isPending} save={(input, cb) => create.mutate(input, cb)} />;
+    const initial = draft ? { ...emptyValues, title: draft.title, sqlUp: draft.sqlUp } : emptyValues;
+    return <MigrationEditor title="Buat migration" dbId={dbId} initial={initial} back={`/migration/database/${dbId}`} pending={create.isPending} save={(input, cb) => create.mutate(input, cb)} />;
 }
 
 export function MigrationEditPage() {

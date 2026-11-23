@@ -26,6 +26,7 @@ import { JobMonitorPage } from "./pages/migration/JobMonitorPage";
 import { MigrationEditPage, MigrationNewPage } from "./pages/migration/MigrationEditorPage";
 import { MigrationListPage } from "./pages/migration/MigrationListPage";
 import { MigrationReviewPage } from "./pages/migration/MigrationReviewPage";
+import { SchemaDiffPage } from "./pages/migration/SchemaDiffPage";
 
 export const basename = "/app";
 
@@ -74,6 +75,7 @@ export const router = createBrowserRouter(
                         { path: "/migration/database/:dbId/baru", element: <MigrationNewPage /> },
                         { path: "/migration/database/:dbId/riwayat", element: <HistoryPage /> },
                         { path: "/migration/database/:dbId/riwayat/:executionId", element: <ExecutionDetailPage /> },
+                        { path: "/migration/database/:dbId/schema-diff", element: <SchemaDiffPage /> },
                         { path: "/migration/job/:jobId", element: <JobMonitorPage /> },
                         { path: "/migration/:id", element: <MigrationReviewPage /> },
                         { path: "/migration/:id/ubah", element: <MigrationEditPage /> },

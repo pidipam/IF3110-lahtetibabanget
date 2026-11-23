@@ -12,6 +12,7 @@ import { canEdit, canExecute, canSubmit, type Migration } from "../../lib/migrat
 import { toast } from "../../lib/toast";
 import { ErrorView } from "../ErrorPage";
 import { ApproversPanel } from "./ApproversPanel";
+import { ExplainPanel } from "./ExplainPanel";
 import { MockBanner, StatusBadge, databaseName, formatDateTime, levelFor } from "./shared";
 
 export function MigrationReviewPage() {
@@ -50,6 +51,7 @@ function Review({ migration: m, canChange }: { migration: Migration; canChange: 
     const [dialog, setDialog] = useState<"submit" | "execute" | null>(null);
     const navigate = useNavigate();
     const dbName = databaseName(me, m.database_id);
+    const engine = me.databases.find((d) => String(d.id) === m.database_id)?.engine;
 
     const onSubmit = () => {
         submit.mutate(undefined, {
@@ -117,6 +119,8 @@ function Review({ migration: m, canChange }: { migration: Migration; canChange: 
                     </div>
                 </div>
             </Section>
+
+            {canChange && canEdit(m.status) && <ExplainPanel key={rev.revision_number} migrationId={m.id} engine={engine} />}
 
             <div className="grid gap-6 lg:grid-cols-2">
                 <Section title="Detail">
