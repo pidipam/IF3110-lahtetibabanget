@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,6 +26,19 @@ type schemaDiffScope struct {
 	DBID int64
 	Conn *dbconn.Connection
 	Pool *pgxpool.Pool
+}
+
+func dbPath(id int64) string { return "/databases/" + strconv.FormatInt(id, 10) }
+
+func (a *App) dbFailure(w http.ResponseWriter, r *http.Request, c *dbconn.Connection, err error) {
+	ce, ok := dbconn.AsConnError(err)
+	if !ok {
+		a.fail(w, r, err)
+		return
+	}
+	a.Logger.Warn("target database unreachable", "connection_id", c.ID, "kind", ce.Kind.String())
+	v := a.View(r, "Database Tidak Dapat Dihubungi", map[string]any{"Conn": c, "Message": ce.Kind.UserMessage(), "Code": http.StatusServiceUnavailable, "Retry": r.URL.RequestURI()})
+	a.Render.Render(w, http.StatusServiceUnavailable, "database_error", v)
 }
 
 func schemaDiffBase(dbID int64) string {

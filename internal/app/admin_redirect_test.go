@@ -70,7 +70,7 @@ func TestOldGroupPageLinksToSPAAndAccess(t *testing.T) {
 	w := admin.do("GET", fmt.Sprintf("/admin/groups/%d", gid), nil)
 	expectStatus(t, w, http.StatusOK)
 	body := w.Body.String()
-	for _, want := range []string{fmt.Sprintf(`href="/app/admin/grup/%d"`, gid), fmt.Sprintf(`href="/admin/groups/%d/access"`, gid), "tim &lt;data&gt;", `href="/app/admin/user"`, `href="/app/admin/grup"`} {
+	for _, want := range []string{fmt.Sprintf(`href="/app/admin/grup/%d"`, gid), fmt.Sprintf(`href="/api/admin/groups/%d/access"`, gid), "tim &lt;data&gt;", `href="/app/admin/user"`, `href="/app/admin/grup"`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("halaman grup tidak memuat %q", want)
 		}

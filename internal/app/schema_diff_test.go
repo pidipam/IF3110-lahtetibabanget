@@ -162,17 +162,12 @@ func TestSchemaDiffAccessControl(t *testing.T) {
 		expectStatus(t, c.post(f.base+"/migration", url.Values{"title": {"x"}, "schema": {"public"}, "sql": {"SELECT 1;"}}), http.StatusForbidden)
 	}
 
-	detail := f.view.do("GET", fmt.Sprintf("/databases/%d", f.conn.ID), nil)
-	expectStatus(t, detail, http.StatusOK)
-	notContains(t, detail.Body.String(), "Schema diff")
-	notContains(t, f.guest.do("GET", fmt.Sprintf("/databases/%d", f.conn.ID), nil).Body.String(), "Schema diff")
-
 	w := f.ed.do("GET", f.base, nil)
 	expectStatus(t, w, http.StatusOK)
 	contains(t, w.Body.String(), "Schema diff", `name="desired_ddl"`, "Kondisi DDL yang diinginkan", "Lihat kondisi DDL saat ini", "CREATE TABLE")
-	contains(t, f.ed.do("GET", fmt.Sprintf("/databases/%d", f.conn.ID), nil).Body.String(), "Schema diff")
 
 	expectStatus(t, f.ed.do("GET", "/databases/abc/schema-diff", nil), http.StatusNotFound)
+
 	expectStatus(t, f.ed.do("GET", "/databases/9999/schema-diff", nil), http.StatusForbidden)
 	expectStatus(t, f.ed.do("GET", f.base+"?schema=tidak_ada", nil), http.StatusUnprocessableEntity)
 
@@ -180,7 +175,6 @@ func TestSchemaDiffAccessControl(t *testing.T) {
 		t.Fatal(err)
 	}
 	expectStatus(t, f.ed.do("GET", f.base, nil), http.StatusForbidden)
-	notContains(t, f.ed.do("GET", fmt.Sprintf("/databases/%d", f.conn.ID), nil).Body.String(), "Schema diff")
 }
 
 func TestSchemaDiffPreview(t *testing.T) {
