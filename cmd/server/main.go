@@ -15,26 +15,36 @@ import (
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/auth"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/config"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/dbconn"
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/obs"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/platformdb"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/queue"
 )
 
 func main() {
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	if err := run(logger); err != nil {
-		logger.Error("server stopped", "err", err)
+	cfg := config.Load()
+	logger := obs.NewLogger(cfg.LogLevel)
+	if err := run(cfg, logger); err != nil {
+		logger.Error("server stopped", "error", err.Error())
 		os.Exit(1)
 	}
 }
 
-func run(logger *slog.Logger) error {
-	cfg := config.Load()
+func run(cfg config.Config, logger *slog.Logger) error {
 	encKey, err := dbconn.ParseKey(cfg.EncryptionKey)
 	if err != nil {
 		return fmt.Errorf("APP_ENCRYPTION_KEY tidak valid: %w (gunakan openssl rand -base64 32)", err)
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	shutdownTracer, err := obs.InitTracer(ctx, cfg.ServiceName+"-server")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = shutdownTracer(shutdownCtx)
+	}()
 	db, err := platformdb.Connect(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return err
@@ -43,7 +53,7 @@ func run(logger *slog.Logger) error {
 	if err := platformdb.Migrate(ctx, db); err != nil {
 		return err
 	}
-	jobQueue := queue.New(db)
+	jobQueue := obs.WrapQueue(queue.New(db))
 	a, err := app.New(app.Options{DB: db, Session: auth.SessionConfig{IdleTimeout: cfg.IdleTimeout, AbsoluteTimeout: cfg.AbsoluteTimeout, RotateInterval: cfg.RotateInterval, GracePeriod: cfg.GracePeriod}, Secure: cfg.Production, Logger: logger, EncryptionKey: encKey, Queue: jobQueue})
 	if err != nil {
 		return err
@@ -65,7 +75,7 @@ func run(logger *slog.Logger) error {
 
 	a.StartWorkflowRecovery(ctx)
 	go cleanupSessions(ctx, a.Sessions, logger)
-	srv := &http.Server{Addr: cfg.Addr, Handler: a, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 120 * time.Second}
+	srv := &http.Server{Addr: cfg.Addr, Handler: obs.Middleware(a), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 120 * time.Second}
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

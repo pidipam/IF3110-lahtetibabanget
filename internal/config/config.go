@@ -23,6 +23,8 @@ type Config struct {
 	WorkerPollInterval     time.Duration
 	WorkerMaxAttempts      int
 	WorkerRecoveryInterval time.Duration
+	LogLevel               string
+	ServiceName            string
 }
 
 func Load() Config {
@@ -43,6 +45,8 @@ func Load() Config {
 		WorkerPollInterval:     duration("WORKER_POLL_INTERVAL", 250*time.Millisecond),
 		WorkerMaxAttempts:      intEnv("WORKER_MAX_ATTEMPTS", 5),
 		WorkerRecoveryInterval: duration("WORKER_RECOVERY_INTERVAL", 15*time.Second),
+		LogLevel:               env("LOG_LEVEL", "info"),
+		ServiceName:            env("OTEL_SERVICE_NAME", "dbmp"),
 	}
 }
 

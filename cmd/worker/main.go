@@ -17,26 +17,38 @@ import (
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/dbconn"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/migration/exec"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/migration/workflow"
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/obs"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/platformdb"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/queue"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	if err := run(logger); err != nil {
+	cfg := config.Load()
+	logger := obs.NewLogger(cfg.LogLevel)
+	if err := run(cfg, logger); err != nil {
 		logger.Error("worker stopped", "error", err.Error())
 		os.Exit(1)
 	}
 }
 
-func run(logger *slog.Logger) error {
-	cfg := config.Load()
+func run(cfg config.Config, logger *slog.Logger) error {
 	encKey, err := dbconn.ParseKey(cfg.EncryptionKey)
 	if err != nil {
 		return fmt.Errorf("APP_ENCRYPTION_KEY tidak valid: %w (gunakan openssl rand -base64 32)", err)
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	shutdownTracer, err := obs.InitTracer(ctx, cfg.ServiceName+"-worker")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = shutdownTracer(shutdownCtx)
+	}()
 
 	db, err := platformdb.Connect(ctx, cfg.DatabaseURL)
 	if err != nil {
@@ -55,7 +67,8 @@ func run(logger *slog.Logger) error {
 	authorizer := authz.New(authz.NewPGStore(db))
 	approvals := approval.NewService(db, authorizer)
 	deps := app.NewWorkflowDeps(db, authorizer, approvals, targets)
-	jobs := queue.New(db)
+	rawJobs := queue.New(db)
+	jobs := obs.WrapQueue(rawJobs)
 
 	lease := cfg.WorkerLease
 	if lease < 3*time.Second {
@@ -89,7 +102,7 @@ func run(logger *slog.Logger) error {
 		Lease:     lease,
 	}
 
-	if n, err := jobs.Recover(ctx); err != nil {
+	if n, err := rawJobs.Recover(ctx); err != nil {
 		return fmt.Errorf("recover jobs: %w", err)
 	} else if n > 0 {
 		logger.Warn("job dengan lease kedaluwarsa ditandai gagal", "jumlah", n)
@@ -98,20 +111,20 @@ func run(logger *slog.Logger) error {
 		return fmt.Errorf("recover eksekusi: %w", err)
 	}
 	go handler.RunRecovery(ctx, recoveryEvery)
-	go runJobRecovery(ctx, jobs, recoveryEvery, logger)
+	go runJobRecovery(ctx, rawJobs, recoveryEvery, logger)
 
 	logger.Info("worker berjalan", "worker", workerID, "lease", lease.String(), "poll", poll.String())
 	ticker := time.NewTicker(poll)
 	defer ticker.Stop()
 	for {
-		job, err := jobs.Claim(ctx, workerID, lease)
+		job, err := rawJobs.Claim(ctx, workerID, lease)
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil
 			}
 			logger.Error("claim job gagal", "error", err.Error())
 		} else if job != nil {
-			process(ctx, handler, jobs, job, workerID, lease, cfg.WorkerMaxAttempts, logger)
+			process(ctx, handler, rawJobs, job, workerID, lease, cfg.WorkerMaxAttempts, logger)
 			continue
 		}
 		select {
@@ -168,12 +181,20 @@ func process(ctx context.Context, handler *exec.Handler, jobs *queue.Store, job 
 		}
 	}()
 
-	handleCtx := queue.WithTraceparent(runCtx, job.Traceparent)
+	traceCtx := obs.ContextWithTraceparent(runCtx, job.Traceparent)
+	traceCtx, span := obs.StartSpan(traceCtx, "migration.execute",
+		attribute.Int64("execution.id", job.ExecutionID),
+		attribute.String("job.id", job.JobID),
+		attribute.Int("job.attempt", job.Attempts))
+	defer span.End()
+	handleCtx := queue.WithTraceparent(traceCtx, obs.Traceparent(traceCtx))
 	err := handler.Handle(handleCtx, job.ExecutionID)
 	hbStop()
 	<-hbDone
 
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		if ctx.Err() != nil {
 			logger.Warn("worker berhenti saat memproses job", "job", job.JobID, "execution", job.ExecutionID)
 			return
