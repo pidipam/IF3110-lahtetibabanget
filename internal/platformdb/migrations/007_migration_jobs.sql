@@ -1,8 +1,3 @@
--- Antrean migration M2 (WP7). Satu baris = satu percobaan eksekusi.
--- Job sengaja tidak punya UNIQUE (execution_id): retry, recovery, dan duplikat
--- pesan dibuat sebagai baris baru. Idempotensi eksekusi ditangani oleh
--- exec.Handler lewat Claim atomik di platform_migration_executions.
-
 CREATE TABLE platform_migration_jobs (
 	id BIGSERIAL PRIMARY KEY,
 	job_id TEXT NOT NULL UNIQUE,

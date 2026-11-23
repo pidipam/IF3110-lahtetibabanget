@@ -16,6 +16,7 @@ import (
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/config"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/dbconn"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/platformdb"
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/queue"
 )
 
 func main() {
@@ -42,7 +43,8 @@ func run(logger *slog.Logger) error {
 	if err := platformdb.Migrate(ctx, db); err != nil {
 		return err
 	}
-	a, err := app.New(app.Options{DB: db, Session: auth.SessionConfig{IdleTimeout: cfg.IdleTimeout, AbsoluteTimeout: cfg.AbsoluteTimeout, RotateInterval: cfg.RotateInterval, GracePeriod: cfg.GracePeriod}, Secure: cfg.Production, Logger: logger, EncryptionKey: encKey})
+	jobQueue := queue.New(db)
+	a, err := app.New(app.Options{DB: db, Session: auth.SessionConfig{IdleTimeout: cfg.IdleTimeout, AbsoluteTimeout: cfg.AbsoluteTimeout, RotateInterval: cfg.RotateInterval, GracePeriod: cfg.GracePeriod}, Secure: cfg.Production, Logger: logger, EncryptionKey: encKey, Queue: jobQueue})
 	if err != nil {
 		return err
 	}

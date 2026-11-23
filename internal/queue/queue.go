@@ -1,7 +1,3 @@
-// Package queue mengimplementasikan antrean migration M2 di atas PostgreSQL.
-// Store memenuhi workflow.Queue; worker mengambil job dengan SKIP LOCKED dan
-// memperpanjang lease lewat heartbeat. Eksekusi tetap menjadi tanggung jawab
-// exec.Handler, bukan package ini.
 package queue
 
 import (
@@ -22,7 +18,6 @@ var (
 	ErrInvalidState = errors.New("status job tidak valid")
 )
 
-// Job adalah satu baris antrean yang sedang diproses worker.
 type Job struct {
 	ID          int64
 	JobID       string
@@ -31,7 +26,6 @@ type Job struct {
 	Traceparent string
 }
 
-// Store menyimpan job di platform database yang sama dengan server.
 type Store struct{ db *pgxpool.Pool }
 
 func New(db *pgxpool.Pool) *Store { return &Store{db: db} }
@@ -40,22 +34,15 @@ var _ workflow.Queue = (*Store)(nil)
 
 type traceparentKey struct{}
 
-// WithTraceparent menyimpan nilai traceparent ke context agar ikut tersimpan
-// di baris job. Paket obs (WP8) akan mengisi nilai ini dari propagasi OTel.
 func WithTraceparent(ctx context.Context, traceparent string) context.Context {
 	return context.WithValue(ctx, traceparentKey{}, traceparent)
 }
 
-// TraceparentFromContext mengembalikan nilai yang disimpan WithTraceparent.
 func TraceparentFromContext(ctx context.Context) string {
 	v, _ := ctx.Value(traceparentKey{}).(string)
 	return v
 }
 
-// Enqueue membuat job baru untuk sebuah execution dan menjadwalkannya pada
-// now()+delay. Job sengaja dibuat baru setiap kali dipanggil: retry internal
-// exec.Handler dan recovery memanggil Enqueue lagi, sementara idempotensi
-// permintaan pengguna sudah dijaga workflow.Service.
 func (s *Store) Enqueue(ctx context.Context, executionID int64, delay time.Duration) (string, error) {
 	if delay < 0 {
 		delay = 0
@@ -74,8 +61,6 @@ func (s *Store) Enqueue(ctx context.Context, executionID int64, delay time.Durat
 	return jobID, nil
 }
 
-// Claim mengambil satu job yang sudah jatuh tempo. SKIP LOCKED membuat banyak
-// worker aman mengambil job berbeda tanpa saling menunggu.
 func (s *Store) Claim(ctx context.Context, worker string, lease time.Duration) (*Job, error) {
 	if lease <= 0 {
 		lease = 30 * time.Second
@@ -103,8 +88,6 @@ func (s *Store) Claim(ctx context.Context, worker string, lease time.Duration) (
 	return &j, nil
 }
 
-// Heartbeat memperpanjang lease job yang masih dipegang worker.
-// false berarti job hilang (worker lain atau sudah selesai).
 func (s *Store) Heartbeat(ctx context.Context, jobID, worker string, lease time.Duration) (bool, error) {
 	ct, err := s.db.Exec(ctx, `UPDATE platform_migration_jobs SET
 		lease_until=now() + make_interval(secs => $3), updated_at=now()
@@ -115,7 +98,6 @@ func (s *Store) Heartbeat(ctx context.Context, jobID, worker string, lease time.
 	return ct.RowsAffected() == 1, nil
 }
 
-// Requeue menjadwalkan ulang job yang gagal pada level worker (error infra).
 func (s *Store) Requeue(ctx context.Context, jobID string, delay time.Duration, msg string) error {
 	if delay < 0 {
 		delay = 0
@@ -134,7 +116,6 @@ func (s *Store) Requeue(ctx context.Context, jobID string, delay time.Duration, 
 	return nil
 }
 
-// Finish menandai job selesai. status harus "done" atau "failed".
 func (s *Store) Finish(ctx context.Context, jobID, status, msg string) error {
 	if status != "done" && status != "failed" {
 		return fmt.Errorf("%w: %s", ErrInvalidState, status)
@@ -152,9 +133,6 @@ func (s *Store) Finish(ctx context.Context, jobID, status, msg string) error {
 	return nil
 }
 
-// Recover menandai job yang lease-nya kedaluwarsa sebagai failed. Penjadwalan
-// ulang eksekusi dilakukan exec.Handler.RecoverStale, jadi tidak dibuat job
-// pending ganda di sini. Mengembalikan jumlah job yang dipulihkan.
 func (s *Store) Recover(ctx context.Context) (int64, error) {
 	ct, err := s.db.Exec(ctx, `UPDATE platform_migration_jobs SET
 		status='failed', last_error='worker lease expired',
@@ -179,7 +157,7 @@ func newJobID() (string, error) {
 	if _, err := rand.Read(b[:]); err != nil {
 		return "", err
 	}
-	b[6] = (b[6] & 0x0f) | 0x40 // version 4
+	b[6] = (b[6] & 0x0f) | 0x40 
 	b[8] = (b[8] & 0x3f) | 0x80 // variant RFC 4122
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16]), nil
 }

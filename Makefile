@@ -12,7 +12,7 @@ export TARGET_DB_URL
 export TEST_DATABASE_URL
 export TARGET_MARIADB_ADDR
 
-.PHONY: help up down reset-target run test test-unit test-integration web-install web-build web-dev build
+.PHONY: help up down reset-target run run-worker test test-unit test-integration web-install web-build web-dev build build-worker
 .PHONY: ... reset-mariadb
 
 help: 
@@ -48,6 +48,12 @@ web-dev: ## Vite dev server :5173, proxy /api ke :8080; buka http://localhost:51
 
 build: web-build ## build SPA lalu binary server ke bin/server
 	go build -o bin/server ./cmd/server
+
+build-worker: ## build binary worker ke bin/worker
+	go build -o bin/worker ./cmd/worker
+
+run-worker: ## jalankan worker antrean (baca .env bila ada)
+	@set -a; [ ! -f .env ] || . ./.env; set +a; go run ./cmd/worker
 
 test-unit: ## unit test saja (-short), tanpa database; boleh PKG=./internal/dbconn
 	go test -short $(PKG) -count=1

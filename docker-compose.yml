@@ -9,6 +9,11 @@ services:
       - "5434:5432"
     volumes:
       - platform-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d dbmp"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
   test-db:
     image: postgres:16
     environment:
@@ -49,5 +54,21 @@ services:
       interval: 2s
       timeout: 3s
       retries: 30
+
+  worker:
+    build: .
+    command: ["worker"]
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@platform-db:5432/dbmp?sslmode=disable
+      APP_ENCRYPTION_KEY: ViQIBs1QPisgpu5jmZ6xOAvG25UXZhzma/gdUag/afA=
+      WORKER_ID: compose-worker-1
+      WORKER_LEASE: 30s
+      WORKER_POLL_INTERVAL: 250ms
+      WORKER_MAX_ATTEMPTS: 5
+      WORKER_RECOVERY_INTERVAL: 15s
+    depends_on:
+      platform-db:
+        condition: service_healthy
+    restart: unless-stopped
 volumes:
   platform-data:
