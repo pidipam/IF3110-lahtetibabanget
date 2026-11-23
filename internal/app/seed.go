@@ -4,10 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/auth"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/users"
 )
+
+var usernamePattern = regexp.MustCompile(`^[a-z0-9_.-]{3,32}$`)
+
+func normalizeUsername(s string) string {
+	return strings.ToLower(strings.TrimSpace(s))
+}
 
 func SeedAdmin(ctx context.Context, store *users.Store, username, password string) (bool, error) {
 	n, err := store.CountActiveAdmins(ctx)

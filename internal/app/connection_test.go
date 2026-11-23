@@ -57,14 +57,6 @@ func connInput(name string) connBody {
 	return connBody{Name: name, Engine: dbconn.EnginePostgres, Host: "127.0.0.1", Port: 5435, DBName: "sample", Username: "app", Password: secretPW, SSLMode: "disable"}
 }
 
-func (e *testEnv) loginAs(username string, admin bool) *client {
-	e.t.Helper()
-	e.createUser(username, "password123", admin)
-	c := e.client()
-	expectStatus(e.t, c.login(username, "password123"), http.StatusSeeOther)
-	return c
-}
-
 func (e *testEnv) apiUser(username string, admin bool) *apiClient {
 	e.t.Helper()
 	e.createUser(username, "password123", admin)

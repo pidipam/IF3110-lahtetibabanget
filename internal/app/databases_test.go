@@ -100,15 +100,6 @@ type tablePageResponse struct {
 	Order      string        `json:"order"`
 }
 
-func (e *testEnv) member(username string, connID int64, level authz.Level) *client {
-	e.t.Helper()
-	gid := testutil.SeedGroup(e.t, e.db, "grup-"+username)
-	c := e.loginAs(username, false)
-	testutil.SeedMember(e.t, e.db, gid, e.userID(username))
-	testutil.SeedGrant(e.t, e.db, gid, connID, level)
-	return c
-}
-
 func (e *testEnv) apiMember(username string, connID int64, level authz.Level) *apiClient {
 	e.t.Helper()
 	gid := testutil.SeedGroup(e.t, e.db, "grup-"+username)

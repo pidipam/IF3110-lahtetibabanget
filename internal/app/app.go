@@ -18,7 +18,6 @@ import (
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/migration/spaapi"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/migration/workflow"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/users"
-	"github.com/pidipam/IF3110-lahtetibabanget/internal/web"
 	webui "github.com/pidipam/IF3110-lahtetibabanget/web"
 )
 
@@ -36,7 +35,6 @@ type App struct {
 	Sessions      *auth.SessionStore
 	Authz         *authz.Authorizer
 	Auth          *auth.Manager
-	Render        *web.Renderer
 	Logger        *slog.Logger
 	Conns         *dbconn.Store
 	Manager       *dbconn.Manager
@@ -44,7 +42,6 @@ type App struct {
 	Grants        *dbconn.GrantService
 	mux           *http.ServeMux
 	handler       http.Handler
-	Migrations    *migration.Service
 	migrationExec *migration.Executor
 	Approvals *approval.Service
 	Workflow      *workflow.Service
@@ -52,18 +49,12 @@ type App struct {
 	wfAPI         *spaapi.Handler
 }
 
-var notices = map[string]string{"connection_created": "Koneksi database berhasil dibuat.", "connection_updated": "Koneksi database berhasil diperbarui.", "connection_deleted": "Koneksi database berhasil dihapus.", "access_updated": "Akses database grup berhasil diperbarui."}
-
 func New(opt Options) (*App, error) {
-	rd, err := web.NewRenderer()
-	if err != nil {
-		return nil, err
-	}
 	logger := opt.Logger
 	if logger == nil {
 		logger = slog.Default()
 	}
-	a := &App{Users: users.NewStore(opt.DB), Sessions: auth.NewSessionStore(opt.DB, opt.Session), Authz: authz.New(authz.NewPGStore(opt.DB)), Render: rd, Logger: logger, mux: http.NewServeMux()}
+	a := &App{Users: users.NewStore(opt.DB), Sessions: auth.NewSessionStore(opt.DB, opt.Session), Authz: authz.New(authz.NewPGStore(opt.DB)), Logger: logger, mux: http.NewServeMux()}
 	a.Auth = &auth.Manager{Sessions: a.Sessions, Users: a.Users, Secure: opt.Secure, Unauthorized: a.unauthorized, Forbidden: a.forbidden, Fail: a.fail}
 	cipher, err := dbconn.NewCipher(opt.EncryptionKey)
 	if err != nil {
@@ -80,7 +71,6 @@ func New(opt Options) (*App, error) {
 		getSQL: a.Manager.GetSQL,
 	}
 	a.migrationExec = migration.NewExecutor(opt.DB, repo, targets, 0)
-	a.Migrations = migration.NewService(repo, a.migrationExec, a.Authz)
 	a.Approvals = approval.NewService(opt.DB, a.Authz)
 	a.initWorkflow(opt, targets)
 	a.routes()
@@ -98,28 +88,6 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) Handle(pattern string, h http.Handler) {
 	a.mux.Handle(pattern, h)
-}
-
-func (a *App) View(r *http.Request, title string, data map[string]any) web.View {
-	id := auth.FromContext(r.Context())
-	if data == nil {
-		data = map[string]any{}
-	}
-	return web.View{Title: title, Nav: navOf(r.URL.Path), User: id.User, CSRF: id.CSRF, Notice: notices[r.URL.Query().Get("ok")], Data: data}
-}
-
-func navOf(path string) string {
-	switch {
-	case path == "/":
-		return "home"
-	case strings.HasPrefix(path, "/admin/groups"):
-		return "groups"
-	case strings.HasPrefix(path, "/admin/connections"):
-		return "connections"
-	case strings.HasPrefix(path, "/databases"):
-		return "databases"
-	}
-	return ""
 }
 
 type statusWriter struct {

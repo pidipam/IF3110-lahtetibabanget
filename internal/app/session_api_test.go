@@ -194,7 +194,7 @@ func TestSPAServedUnderApp(t *testing.T) {
 	if r.Code != http.StatusMovedPermanently || r.Header().Get("Location") != "/app/" {
 		t.Fatalf("redirect /app: %d %q", r.Code, r.Header().Get("Location"))
 	}
-	expectStatus(t, e.api().send("GET", "/login", "", ""), http.StatusOK)
+	expectStatus(t, e.api().send("GET", "/login", "", ""), http.StatusSeeOther)
 	expectStatus(t, e.api().send("POST", "/app/login", "", ""), http.StatusForbidden)
 }
 
