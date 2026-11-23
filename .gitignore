@@ -31,3 +31,9 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# SPA
+web/node_modules/
+web/dist/*
+!web/dist/.gitkeep
+/bin/

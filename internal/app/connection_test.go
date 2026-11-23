@@ -2,9 +2,9 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 	"testing"
 
@@ -17,16 +17,50 @@ const secretPW = "pw-rahasia-Zq9x7"
 
 const closedPort = 5499
 
-func connValues(name string) url.Values {
-	return url.Values{"name": {name}, "host": {"127.0.0.1"}, "port": {"5435"}, "db_name": {"sample"}, "username": {"app"}, "password": {secretPW}, "sslmode": {"disable"}}
+const msgConnInUse = "Koneksi tidak dapat dihapus karena sudah memiliki riwayat migration."
+
+type connBody struct {
+	Name     string `json:"name"`
+	Engine   string `json:"engine"`
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	DBName   string `json:"db_name"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	SSLMode  string `json:"sslmode"`
 }
 
-func (e *testEnv) loginAs(username string, admin bool) *client {
+type connResponse struct {
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	Engine    string `json:"engine"`
+	Host      string `json:"host"`
+	Port      int    `json:"port"`
+	DBName    string `json:"db_name"`
+	Username  string `json:"username"`
+	SSLMode   string `json:"sslmode"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+type connListResponse struct {
+	Items []connResponse `json:"items"`
+}
+
+type testConnResponse struct {
+	Success bool   `json:"success"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+func connInput(name string) connBody {
+	return connBody{Name: name, Engine: dbconn.EnginePostgres, Host: "127.0.0.1", Port: 5435, DBName: "sample", Username: "app", Password: secretPW, SSLMode: "disable"}
+}
+
+func (e *testEnv) apiUser(username string, admin bool) *apiClient {
 	e.t.Helper()
 	e.createUser(username, "password123", admin)
-	c := e.client()
-	expectStatus(e.t, c.login(username, "password123"), http.StatusSeeOther)
-	return c
+	return e.apiLogin(username, "password123")
 }
 
 func (e *testEnv) userID(username string) int64 {
@@ -48,111 +82,119 @@ func (e *testEnv) noSecretInLogs() {
 func TestAdminConnectionCRUD(t *testing.T) {
 	e := setup(t)
 	ctx := context.Background()
-	admin := e.loginAs("admin", true)
+	admin := e.apiUser("admin", true)
 
-	w := admin.post("/admin/connections", connValues("sampel"))
-	expectStatus(t, w, http.StatusSeeOther)
-	if loc := w.Header().Get("Location"); loc != "/admin/connections?ok=connection_created" {
-		t.Fatalf("redirect ke %q", loc)
+	w := admin.json("POST", "/api/admin/connections", connInput("sampel"))
+	expectStatus(t, w, http.StatusCreated)
+	var created connResponse
+	decodeBody(t, w, &created)
+	if created.ID == 0 || created.Name != "sampel" || created.Host != "127.0.0.1" || created.Port != 5435 {
+		t.Fatalf("respons create: %+v", created)
 	}
-	var id int64
 	var enc string
-	if err := e.db.QueryRow(ctx, "SELECT id, password_enc FROM db_connections WHERE name = 'sampel'").Scan(&id, &enc); err != nil {
+	if err := e.db.QueryRow(ctx, "SELECT password_enc FROM db_connections WHERE id = $1", created.ID).Scan(&enc); err != nil {
 		t.Fatal(err)
 	}
 	if enc == "" || strings.Contains(enc, secretPW) {
 		t.Fatalf("password harus tersimpan terenkripsi, bukan plaintext: %q", enc)
 	}
-
-	list := admin.do("GET", "/admin/connections?ok=connection_created", nil)
-	expectStatus(t, list, http.StatusOK)
-	for _, want := range []string{"sampel", "127.0.0.1:5435", "Koneksi database berhasil dibuat."} {
-		if !strings.Contains(list.Body.String(), want) {
-			t.Fatalf("daftar koneksi tidak memuat %q", want)
-		}
-	}
-	edit := admin.do("GET", fmt.Sprintf("/admin/connections/%d", id), nil)
-	expectStatus(t, edit, http.StatusOK)
-	if !strings.Contains(edit.Body.String(), "sampel") {
-		t.Fatal("halaman edit tidak menampilkan koneksi")
-	}
-	for _, body := range []string{list.Body.String(), edit.Body.String()} {
-		if strings.Contains(body, secretPW) || strings.Contains(body, enc) {
-			t.Fatal("password atau ciphertext bocor ke halaman")
-		}
+	if strings.Contains(w.Body.String(), secretPW) || strings.Contains(w.Body.String(), enc) {
+		t.Fatal("password atau ciphertext bocor ke respons")
 	}
 
-	v := connValues("sampel-baru")
-	v.Set("password", "")
-	expectStatus(t, admin.post(fmt.Sprintf("/admin/connections/%d", id), v), http.StatusSeeOther)
-	creds, err := e.app.Conns.Credentials(ctx, id)
+	w = admin.json("GET", "/api/admin/connections", nil)
+	expectStatus(t, w, http.StatusOK)
+	var list connListResponse
+	decodeBody(t, w, &list)
+	if len(list.Items) != 1 || list.Items[0].Name != "sampel" {
+		t.Fatalf("daftar koneksi: %+v", list)
+	}
+	if strings.Contains(w.Body.String(), secretPW) || strings.Contains(w.Body.String(), enc) {
+		t.Fatal("password atau ciphertext bocor ke daftar")
+	}
+
+	w = admin.json("GET", fmt.Sprintf("/api/admin/connections/%d", created.ID), nil)
+	expectStatus(t, w, http.StatusOK)
+	var got connResponse
+	decodeBody(t, w, &got)
+	if got.ID != created.ID || got.Name != "sampel" {
+		t.Fatalf("detail koneksi: %+v", got)
+	}
+	if strings.Contains(w.Body.String(), secretPW) || strings.Contains(w.Body.String(), enc) {
+		t.Fatal("password atau ciphertext bocor ke detail")
+	}
+
+	update := connInput("sampel-baru")
+	update.Password = ""
+	w = admin.json("PATCH", fmt.Sprintf("/api/admin/connections/%d", created.ID), update)
+	expectStatus(t, w, http.StatusOK)
+	creds, err := e.app.Conns.Credentials(ctx, created.ID)
 	if err != nil || creds.Password != secretPW {
 		t.Fatalf("password kosong harus mempertahankan password lama: %v", err)
 	}
-	if e.count("SELECT count(*) FROM db_connections WHERE name = 'sampel-baru'") != 1 {
+	if e.count("SELECT count(*) FROM db_connections WHERE name = $1", "sampel-baru") != 1 {
 		t.Fatal("nama koneksi tidak berubah")
 	}
-	v.Set("password", "password-baru")
-	expectStatus(t, admin.post(fmt.Sprintf("/admin/connections/%d", id), v), http.StatusSeeOther)
-	if creds, _ := e.app.Conns.Credentials(ctx, id); creds.Password != "password-baru" {
+
+	update.Password = "password-baru"
+	expectStatus(t, admin.json("PATCH", fmt.Sprintf("/api/admin/connections/%d", created.ID), update), http.StatusOK)
+	if creds, _ := e.app.Conns.Credentials(ctx, created.ID); creds.Password != "password-baru" {
 		t.Fatal("password baru tidak tersimpan")
 	}
 
-	expectStatus(t, admin.post(fmt.Sprintf("/admin/connections/%d/delete", id), nil), http.StatusSeeOther)
+	expectStatus(t, admin.json("DELETE", fmt.Sprintf("/api/admin/connections/%d", created.ID), nil), http.StatusNoContent)
 	if e.count("SELECT count(*) FROM db_connections") != 0 {
 		t.Fatal("koneksi tidak terhapus")
 	}
-	expectStatus(t, admin.do("GET", fmt.Sprintf("/admin/connections/%d", id), nil), http.StatusNotFound)
-	expectStatus(t, admin.post(fmt.Sprintf("/admin/connections/%d/delete", id), nil), http.StatusNotFound)
-	expectStatus(t, admin.post("/admin/connections/abc", connValues("x")), http.StatusNotFound)
+	expectAPIError(t, admin.json("GET", fmt.Sprintf("/api/admin/connections/%d", created.ID), nil), http.StatusNotFound, "not_found")
+	expectAPIError(t, admin.json("DELETE", fmt.Sprintf("/api/admin/connections/%d", created.ID), nil), http.StatusNotFound, "not_found")
+	expectAPIError(t, admin.json("PATCH", "/api/admin/connections/abc", connInput("x")), http.StatusNotFound, "not_found")
 	e.noSecretInLogs()
 }
 
 func TestAdminConnectionValidation(t *testing.T) {
 	e := setup(t)
-	admin := e.loginAs("admin", true)
-	set := func(k, v string) url.Values { f := connValues("valid"); f.Set(k, v); return f }
-	cases := []struct {
-		name string
-		form url.Values
-		msg  string
-	}{
-		{"nama kosong", set("name", "  "), "Nama koneksi wajib diisi"},
-		{"nama terlalu panjang", set("name", strings.Repeat("a", 65)), "maksimal 64"},
-		{"host kosong", set("host", ""), "Host tidak valid."},
-		{"host berisi simbol", set("host", "a/b@c"), "Host tidak valid."},
-		{"port bukan angka", set("port", "abc"), "Port harus antara 1 dan 65535."},
-		{"port nol", set("port", "0"), "Port harus antara 1 dan 65535."},
-		{"port terlalu besar", set("port", "70000"), "Port harus antara 1 dan 65535."},
-		{"database kosong", set("db_name", ""), "Nama database wajib diisi"},
-		{"username kosong", set("username", ""), "Username wajib diisi"},
-		{"password kosong", set("password", ""), "Password wajib diisi."},
-		{"sslmode salah", set("sslmode", "bebas"), "SSL mode tidak valid."},
+	admin := e.apiUser("admin", true)
+	type validationCase struct {
+		name  string
+		body  connBody
+		field string
+	}
+	base := connInput("valid")
+	with := func(fn func(*connBody)) connBody {
+		b := base
+		fn(&b)
+		return b
+	}
+	cases := []validationCase{
+		{"nama kosong", with(func(b *connBody) { b.Name = "  " }), "name"},
+		{"nama terlalu panjang", with(func(b *connBody) { b.Name = strings.Repeat("a", 65) }), "name"},
+		{"host kosong", with(func(b *connBody) { b.Host = "" }), "host"},
+		{"host berisi simbol", with(func(b *connBody) { b.Host = "a/b@c" }), "host"},
+		{"port nol", with(func(b *connBody) { b.Port = 0 }), "port"},
+		{"port terlalu besar", with(func(b *connBody) { b.Port = 70000 }), "port"},
+		{"database kosong", with(func(b *connBody) { b.DBName = "" }), "db_name"},
+		{"username kosong", with(func(b *connBody) { b.Username = "" }), "username"},
+		{"password kosong", with(func(b *connBody) { b.Password = "" }), "password"},
+		{"sslmode salah", with(func(b *connBody) { b.SSLMode = "bebas" }), "sslmode"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			w := admin.post("/admin/connections", tc.form)
-			expectStatus(t, w, http.StatusUnprocessableEntity)
-			if !strings.Contains(w.Body.String(), tc.msg) {
-				t.Fatalf("pesan %q tidak ada", tc.msg)
-			}
+			w := admin.json("POST", "/api/admin/connections", tc.body)
+			expectInvalidField(t, w, tc.field)
 			if strings.Contains(w.Body.String(), secretPW) {
-				t.Fatal("password diisi ulang ke form")
+				t.Fatal("password diisi ulang ke respons")
 			}
 		})
 	}
 	if e.count("SELECT count(*) FROM db_connections") != 0 {
 		t.Fatal("koneksi tidak valid tersimpan")
 	}
-	expectStatus(t, admin.post("/admin/connections", connValues("kembar")), http.StatusSeeOther)
-	w := admin.post("/admin/connections", connValues("kembar"))
-	expectStatus(t, w, http.StatusUnprocessableEntity)
-	if !strings.Contains(w.Body.String(), "Nama koneksi sudah dipakai.") {
-		t.Fatal("pesan nama kembar tidak ada")
-	}
+
+	expectStatus(t, admin.json("POST", "/api/admin/connections", connInput("kembar")), http.StatusCreated)
+	expectAPIError(t, admin.json("POST", "/api/admin/connections", connInput("kembar")), http.StatusConflict, "conflict")
 	other := testutil.SeedConnection(t, e.db)
-	w = admin.post(fmt.Sprintf("/admin/connections/%d", other.ID), connValues("kembar"))
-	expectStatus(t, w, http.StatusUnprocessableEntity)
+	expectAPIError(t, admin.json("PATCH", fmt.Sprintf("/api/admin/connections/%d", other.ID), connInput("kembar")), http.StatusConflict, "conflict")
 	if e.count("SELECT count(*) FROM db_connections") != 2 {
 		t.Fatal("jumlah koneksi berubah")
 	}
@@ -161,101 +203,95 @@ func TestAdminConnectionValidation(t *testing.T) {
 
 func TestAdminConnectionTestButton(t *testing.T) {
 	e := setup(t)
-	admin := e.loginAs("admin", true)
+	admin := e.apiUser("admin", true)
 
-	valid := connValues("baru")
-	valid.Set("password", "app")
-
-	w := admin.post("/admin/connections/test", valid)
+	valid := connInput("baru")
+	valid.Password = "app"
+	w := admin.json("POST", "/api/admin/connections/test", valid)
 	expectStatus(t, w, http.StatusOK)
-	if !strings.Contains(w.Body.String(), "Test koneksi berhasil.") {
-		t.Fatal("test koneksi yang benar harus berhasil")
+	var result testConnResponse
+	decodeBody(t, w, &result)
+	if !result.Success || result.Message == "" {
+		t.Fatalf("test koneksi benar: %+v", result)
 	}
 	if e.count("SELECT count(*) FROM db_connections") != 0 {
 		t.Fatal("test koneksi tidak boleh menyimpan apa pun")
 	}
 
-	bad := connValues("baru")
-	bad.Set("password", "app")
-	bad.Set("port", fmt.Sprint(closedPort))
-	w = admin.post("/admin/connections/test", bad)
+	bad := valid
+	bad.Port = closedPort
+	w = admin.json("POST", "/api/admin/connections/test", bad)
 	expectStatus(t, w, http.StatusOK)
-	body := w.Body.String()
-	if !strings.Contains(body, "Test koneksi gagal.") || !strings.Contains(body, dbconn.KindRefused.UserMessage()) {
-		t.Fatalf("pesan gagal ramah tidak ada: %s", body)
+	decodeBody(t, w, &result)
+	if result.Success || result.Code != dbconn.KindRefused.String() || !strings.Contains(result.Message, dbconn.KindRefused.UserMessage()) {
+		t.Fatalf("test koneksi gagal: %+v", result)
 	}
-	if strings.Contains(body, secretPW) {
-		t.Fatal("password bocor di hasil test")
+	if strings.Contains(w.Body.String(), secretPW) || strings.Contains(w.Body.String(), "127.0.0.1") {
+		t.Fatal("detail koneksi bocor di hasil test")
 	}
 
-	noPW := connValues("baru")
-	noPW.Set("password", "")
-	expectStatus(t, admin.post("/admin/connections/test", noPW), http.StatusUnprocessableEntity)
+	noPW := valid
+	noPW.Password = ""
+	expectAPIError(t, admin.json("POST", "/api/admin/connections/test", noPW), http.StatusUnprocessableEntity, "validation_error")
 
 	saved := testutil.SeedConnection(t, e.db)
-	edit := connValues(saved.Name)
-	edit.Set("password", "")
-	w = admin.post(fmt.Sprintf("/admin/connections/%d/test", saved.ID), edit)
+	edit := connInput(saved.Name)
+	edit.Password = ""
+	w = admin.json("POST", fmt.Sprintf("/api/admin/connections/%d/test", saved.ID), edit)
 	expectStatus(t, w, http.StatusOK)
-	if !strings.Contains(w.Body.String(), "Test koneksi berhasil.") {
-		t.Fatal("edit dengan password kosong harus memakai password tersimpan")
+	decodeBody(t, w, &result)
+	if !result.Success {
+		t.Fatalf("edit dengan password kosong harus memakai password tersimpan: %+v", result)
 	}
-	edit.Set("port", fmt.Sprint(closedPort))
-	w = admin.post(fmt.Sprintf("/admin/connections/%d/test", saved.ID), edit)
+	edit.Port = closedPort
+	w = admin.json("POST", fmt.Sprintf("/api/admin/connections/%d/test", saved.ID), edit)
 	expectStatus(t, w, http.StatusOK)
-	if !strings.Contains(w.Body.String(), "Test koneksi gagal.") {
+	decodeBody(t, w, &result)
+	if result.Success {
 		t.Fatal("test edit ke port mati harus gagal")
 	}
 	if c, _ := e.app.Conns.Get(context.Background(), saved.ID); c.Port != 5435 {
 		t.Fatal("test koneksi tidak boleh mengubah data tersimpan")
 	}
-	expectStatus(t, admin.post("/admin/connections/99999/test", edit), http.StatusNotFound)
+	expectAPIError(t, admin.json("POST", "/api/admin/connections/99999/test", edit), http.StatusNotFound, "not_found")
 	e.noSecretInLogs()
 }
 
-func TestConnectionAndAccessRoutesAreAdminOnly(t *testing.T) {
+func TestConnectionAPIAdminOnly(t *testing.T) {
 	e := setup(t)
 	conn := testutil.SeedConnection(t, e.db)
-	gid := testutil.SeedGroup(t, e.db, "tim")
-	alice := e.loginAs("alice", false)
-	admin := e.loginAs("admin", true)
+	admin := e.apiUser("admin", true)
+	alice := e.apiUser("alice", false)
 	id := conn.ID
 
-	gets := []string{"/admin/connections", "/admin/connections/new", fmt.Sprintf("/admin/connections/%d", id), fmt.Sprintf("/admin/groups/%d/access", gid)}
+	gets := []string{"/api/admin/connections", fmt.Sprintf("/api/admin/connections/%d", id)}
 	for _, p := range gets {
-		expectStatus(t, alice.do("GET", p, nil), http.StatusForbidden)
+		expectAPIError(t, alice.json("GET", p, nil), http.StatusForbidden, "forbidden")
+		expectAPIError(t, e.api().json("GET", p, nil), http.StatusUnauthorized, "unauthenticated")
 	}
-	posts := map[string]url.Values{
-		"/admin/connections":                            connValues("ilegal"),
-		"/admin/connections/test":                       connValues("ilegal"),
-		fmt.Sprintf("/admin/connections/%d", id):        connValues("diubah"),
-		fmt.Sprintf("/admin/connections/%d/test", id):   connValues("diubah"),
-		fmt.Sprintf("/admin/connections/%d/delete", id): nil,
-		fmt.Sprintf("/admin/groups/%d/access", gid):     {fmt.Sprintf("level_%d", id): {"edit"}},
+	posts := []struct {
+		method, path string
+		body         any
+	}{
+		{"POST", "/api/admin/connections", connInput("ilegal")},
+		{"POST", "/api/admin/connections/test", connInput("ilegal")},
+		{"PATCH", fmt.Sprintf("/api/admin/connections/%d", id), connInput("diubah")},
+		{"POST", fmt.Sprintf("/api/admin/connections/%d/test", id), connInput("diubah")},
+		{"DELETE", fmt.Sprintf("/api/admin/connections/%d", id), nil},
 	}
-	for p, form := range posts {
-		expectStatus(t, alice.post(p, form), http.StatusForbidden)
+	for _, tc := range posts {
+		expectAPIError(t, alice.json(tc.method, tc.path, tc.body), http.StatusForbidden, "forbidden")
 	}
 	if e.count("SELECT count(*) FROM db_connections") != 1 || e.count("SELECT count(*) FROM db_connections WHERE name = $1", conn.Name) != 1 {
 		t.Fatal("non-admin berhasil mengubah koneksi")
 	}
-	if e.count("SELECT count(*) FROM group_db_access") != 0 {
-		t.Fatal("non-admin berhasil mengubah akses")
-	}
 
-	anon := e.client()
-	for _, p := range gets {
-		w := anon.do("GET", p, nil)
-		expectStatus(t, w, http.StatusSeeOther)
-		if w.Header().Get("Location") != "/login" {
-			t.Fatalf("%s tidak diarahkan ke /login", p)
-		}
+	body, err := json.Marshal(connInput("tanpa-token"))
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	expectStatus(t, admin.do("POST", fmt.Sprintf("/admin/connections/%d/delete", id), url.Values{}), http.StatusForbidden)
-	expectStatus(t, admin.do("POST", "/admin/connections", connValues("tanpa-token")), http.StatusForbidden)
-	expectStatus(t, admin.do("POST", fmt.Sprintf("/admin/groups/%d/access", gid), url.Values{fmt.Sprintf("level_%d", id): {"view"}}), http.StatusForbidden)
-	if e.count("SELECT count(*) FROM db_connections") != 1 || e.count("SELECT count(*) FROM group_db_access") != 0 {
+	expectAPIError(t, admin.send("POST", "/api/admin/connections", string(body), ""), http.StatusForbidden, "csrf_invalid")
+	if e.count("SELECT count(*) FROM db_connections") != 1 {
 		t.Fatal("request tanpa CSRF mengubah data")
 	}
 }
@@ -263,7 +299,7 @@ func TestConnectionAndAccessRoutesAreAdminOnly(t *testing.T) {
 func TestDeleteConnectionBlockedByHistory(t *testing.T) {
 	e := setup(t)
 	ctx := context.Background()
-	admin := e.loginAs("admin", true)
+	admin := e.apiUser("admin", true)
 	conn := testutil.SeedConnection(t, e.db)
 
 	t.Cleanup(func() { e.db.Exec(context.Background(), "DROP TABLE IF EXISTS zz_test_history") })
@@ -273,8 +309,8 @@ func TestDeleteConnectionBlockedByHistory(t *testing.T) {
 	if _, err := e.db.Exec(ctx, "INSERT INTO zz_test_history (db_id) VALUES ($1)", conn.ID); err != nil {
 		t.Fatal(err)
 	}
-	w := admin.post(fmt.Sprintf("/admin/connections/%d/delete", conn.ID), nil)
-	expectStatus(t, w, http.StatusConflict)
+	w := admin.json("DELETE", fmt.Sprintf("/api/admin/connections/%d", conn.ID), nil)
+	expectAPIError(t, w, http.StatusConflict, "conflict")
 	if !strings.Contains(w.Body.String(), msgConnInUse) {
 		t.Fatal("pesan hapus diblokir tidak ada")
 	}
@@ -282,103 +318,24 @@ func TestDeleteConnectionBlockedByHistory(t *testing.T) {
 		t.Fatal("koneksi dengan riwayat terhapus")
 	}
 	e.db.Exec(ctx, "DELETE FROM zz_test_history")
-	expectStatus(t, admin.post(fmt.Sprintf("/admin/connections/%d/delete", conn.ID), nil), http.StatusSeeOther)
+	expectStatus(t, admin.json("DELETE", fmt.Sprintf("/api/admin/connections/%d", conn.ID), nil), http.StatusNoContent)
 }
 
 func TestDeleteConnectionRevokesGroupSessions(t *testing.T) {
 	e := setup(t)
-	admin := e.loginAs("admin", true)
+	admin := e.apiUser("admin", true)
 	conn := testutil.SeedConnection(t, e.db)
 	gid := testutil.SeedGroup(t, e.db, "tim")
-	alice := e.loginAs("alice", false)
-	outsider := e.loginAs("bob", false)
+	alice := e.apiUser("alice", false)
+	outsider := e.apiUser("bob", false)
 	testutil.SeedMember(t, e.db, gid, e.userID("alice"))
 	testutil.SeedGrant(t, e.db, gid, conn.ID, authz.LevelView)
-	expectStatus(t, alice.do("GET", "/", nil), http.StatusOK)
+	expectStatus(t, alice.json("GET", "/api/me", nil), http.StatusOK)
 
-	body := admin.do("GET", fmt.Sprintf("/admin/connections/%d", conn.ID), nil).Body.String()
-	if !strings.Contains(body, "tim") || !strings.Contains(body, "View Only") {
-		t.Fatal("halaman edit tidak menampilkan grup yang punya akses")
-	}
-	expectStatus(t, admin.post(fmt.Sprintf("/admin/connections/%d/delete", conn.ID), nil), http.StatusSeeOther)
+	expectStatus(t, admin.json("DELETE", fmt.Sprintf("/api/admin/connections/%d", conn.ID), nil), http.StatusNoContent)
 	if e.count("SELECT count(*) FROM group_db_access") != 0 {
 		t.Fatal("grant tidak ikut terhapus")
 	}
-	expectStatus(t, alice.do("GET", "/", nil), http.StatusUnauthorized)
-	expectStatus(t, outsider.do("GET", "/", nil), http.StatusOK)
-}
-
-func TestGroupAccessPage(t *testing.T) {
-	e := setup(t)
-	ctx := context.Background()
-	admin := e.loginAs("admin", true)
-	c1 := testutil.SeedConnection(t, e.db)
-	c2 := testutil.SeedConnection(t, e.db)
-	gid := testutil.SeedGroup(t, e.db, "tim")
-	alice := e.loginAs("alice", false)
-	testutil.SeedMember(t, e.db, gid, e.userID("alice"))
-	path := fmt.Sprintf("/admin/groups/%d/access", gid)
-	l1, l2 := fmt.Sprintf("level_%d", c1.ID), fmt.Sprintf("level_%d", c2.ID)
-
-	page := admin.do("GET", path, nil)
-	expectStatus(t, page, http.StatusOK)
-	if !strings.Contains(page.Body.String(), c1.Name) || !strings.Contains(page.Body.String(), c2.Name) {
-		t.Fatal("daftar database tidak tampil")
-	}
-	if !strings.Contains(admin.do("GET", fmt.Sprintf("/admin/groups/%d", gid), nil).Body.String(), path) {
-		t.Fatal("halaman grup tidak punya tautan ke halaman akses")
-	}
-	expectStatus(t, admin.do("GET", "/admin/groups/99999/access", nil), http.StatusNotFound)
-
-	level := func(connID int64) string {
-		var l string
-		if err := e.db.QueryRow(ctx, "SELECT level FROM group_db_access WHERE group_id = $1 AND db_id = $2", gid, connID).Scan(&l); err != nil {
-			return "none"
-		}
-		return l
-	}
-	rotated := func(step string, want bool) {
-		t.Helper()
-		before := alice.session()
-		expectStatus(t, alice.do("GET", "/", nil), http.StatusOK)
-		if (alice.session() != before) != want {
-			t.Fatalf("%s: rotasi session = %v, want %v", step, !want, want)
-		}
-	}
-
-	expectStatus(t, admin.post(path, url.Values{l1: {"view"}, l2: {"edit"}}), http.StatusSeeOther)
-	if level(c1.ID) != "view" || level(c2.ID) != "edit" {
-		t.Fatalf("level salah: %s %s", level(c1.ID), level(c2.ID))
-	}
-	rotated("akses naik", true)
-	page = admin.do("GET", path+"?ok=access_updated", nil)
-	if !strings.Contains(page.Body.String(), "Akses database grup berhasil diperbarui.") || !strings.Contains(page.Body.String(), `<option value="edit" selected>`) {
-		t.Fatal("halaman tidak mencerminkan level tersimpan")
-	}
-
-	expectStatus(t, admin.post(path, url.Values{l1: {"view"}, l2: {"edit"}}), http.StatusSeeOther)
-	rotated("tanpa perubahan", false)
-
-	w := admin.post(path, url.Values{l1: {"edit"}, l2: {"superadmin"}})
-	expectStatus(t, w, http.StatusUnprocessableEntity)
-	if !strings.Contains(w.Body.String(), "Level akses tidak valid.") || level(c1.ID) != "view" || level(c2.ID) != "edit" {
-		t.Fatal("form tidak valid harus ditolak seluruhnya")
-	}
-	rotated("form ditolak", false)
-
-	expectStatus(t, admin.post(path, url.Values{l1: {"edit"}}), http.StatusSeeOther)
-	if level(c1.ID) != "edit" || level(c2.ID) != "edit" {
-		t.Fatal("field yang tidak dikirim ikut berubah")
-	}
-	rotated("view -> edit", true)
-
-	expectStatus(t, admin.post(path, url.Values{l1: {"view"}}), http.StatusSeeOther)
-	expectStatus(t, alice.do("GET", "/", nil), http.StatusUnauthorized)
-	expectStatus(t, alice.login("alice", "password123"), http.StatusSeeOther)
-
-	expectStatus(t, admin.post(path, url.Values{l1: {"none"}, l2: {"none"}}), http.StatusSeeOther)
-	if e.count("SELECT count(*) FROM group_db_access") != 0 {
-		t.Fatal("grant tidak dicabut")
-	}
-	expectStatus(t, alice.do("GET", "/", nil), http.StatusUnauthorized)
+	expectAPIError(t, alice.json("GET", "/api/me", nil), http.StatusUnauthorized, "session_expired")
+	expectStatus(t, outsider.json("GET", "/api/me", nil), http.StatusOK)
 }

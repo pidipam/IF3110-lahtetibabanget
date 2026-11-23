@@ -5,8 +5,7 @@ Tugas Besar IF3110 Pengembangan Aplikasi Web 2026
 
 Platform web untuk mengelola akses dan perubahan schema database bersama (PostgreSQL, dengan
 dukungan tambahan MySQL/MariaDB): akses diatur per grup, struktur dan data dapat dijelajahi, dan
-setiap perubahan dilakukan lewat migration yang tercatat. Tugas Besar IF3110 Pengembangan Aplikasi
-Web 2026, Milestone 1.
+setiap perubahan dilakukan lewat migration yang tercatat.
 
 ## Fitur
 
@@ -54,6 +53,40 @@ volume. Untuk menghapus semua data (termasuk akun admin) jalankan `docker compos
 
 `make run` membaca file `.env` bila ada (lihat `.env.example`; jangan di-commit).
 
+### SPA
+
+SPA ada di `web/` (Vite, React, TypeScript, Tailwind) dan butuh Node.js 20 atau lebih baru.
+
+```bash
+make web-build # build ke web/dist, hasilnya di-embed ke binary Go
+make run # buka http://localhost:8080/app/
+```
+
+Saat development, jalankan `make web-dev` di terminal lain lalu buka http://localhost:5173/app/.
+Vite meneruskan `/api` ke `:8080` sehingga cookie sesi tetap satu origin.
+
+Halaman koneksi, viewer, dan persetujuan memakai API JSON yang sama dengan server:
+
+| Halaman | Rute SPA | API |
+|---|---|---|
+| Koneksi (admin) | `/app/admin/koneksi`, `/app/admin/koneksi/baru`, `/app/admin/koneksi/{id}` | `/api/admin/connections` dan `/api/admin/connections/test` |
+| Database | `/app/database`, `/app/database/{id}` | `/api/databases` dan `/api/databases/{id}` |
+| Viewer tabel | `/app/database/{id}?schema=...&table=...&page=...` | `/api/databases/{id}/tables/{schema}/{table}` |
+| Persetujuan leader | `/app/persetujuan` | `/api/approvals?mine=true`, `/api/migrations/{id}/approve`, `/api/migrations/{id}/reject` |
+
+Form koneksi memiliki tombol uji koneksi; password tidak pernah dikirim kembali ke browser. Viewer
+menampilkan NULL, sel terpotong, paginasi, dan scroll horizontal. Database target yang mati
+mengarahkan ke halaman `/app/error/503`.
+
+### Persetujuan migration
+
+Setiap eksekusi migration harus disetujui leader dari setiap grup yang punya akses ke database tujuan.
+
+- Grup tanpa leader aktif menahan proses.
+- Pengaju tidak boleh menyetujui permintaannya sendiri.
+- Persetujuan terikat pada revisi. Bila migration diubah, persetujuan lama tidak berlaku.
+- Satu penolakan menolak permintaan.
+
 ### Konfigurasi (environment)
 
 | Variabel | Default | Keterangan |
@@ -84,6 +117,27 @@ target dengan hak minimum.
 MariaDB (`internal/db/target-seed-mysql.sql`), termasuk tabel dengan foreign key, check constraint,
 view, dan tabel tanpa primary key. Saat menambah koneksi, pilih engine `mariadb`.
 `make reset-mariadb` mengembalikannya ke kondisi awal.
+
+### Data uji besar
+
+```bash
+make seed-large LARGE_ROWS=2000000
+```
+
+Target ini membuat ulang tabel stabil `zz_big(id bigint PRIMARY KEY, x int, pad text)` di
+`target-db`, mengisi `id` dari 1 sampai jumlah baris, lalu mengukur satu `UPDATE` seluruh baris
+tanpa batch. Kolom batch yang dipakai Kei adalah `id`.
+
+Bukti yang tercatat (PostgreSQL, diukur lewat `make seed-large`):
+
+| Jumlah baris | Waktu isi data | Satu UPDATE penuh |
+|---|---|---|
+| 2.000.000 | 3.206 ms | 3.662 ms |
+
+`UPDATE` tanpa batch memang lebih dari 1 detik pada ukuran ini, sehingga mode batch bisa diuji
+dengan `batch_column=id` dan `batch_size=50000`. Setelah target ini dijalankan, tabel `zz_big`
+sudah ada; test yang membuat ulang tabel itu harus menjatuhkannya terlebih dahulu atau memakai
+tabel yang sudah diisi.
 
 ## Cara pakai singkat
 
