@@ -118,6 +118,27 @@ MariaDB (`internal/db/target-seed-mysql.sql`), termasuk tabel dengan foreign key
 view, dan tabel tanpa primary key. Saat menambah koneksi, pilih engine `mariadb`.
 `make reset-mariadb` mengembalikannya ke kondisi awal.
 
+### Data uji besar
+
+```bash
+make seed-large LARGE_ROWS=2000000
+```
+
+Target ini membuat ulang tabel stabil `zz_big(id bigint PRIMARY KEY, x int, pad text)` di
+`target-db`, mengisi `id` dari 1 sampai jumlah baris, lalu mengukur satu `UPDATE` seluruh baris
+tanpa batch. Kolom batch yang dipakai Kei adalah `id`.
+
+Bukti yang tercatat (PostgreSQL, diukur lewat `make seed-large`):
+
+| Jumlah baris | Waktu isi data | Satu UPDATE penuh |
+|---|---|---|
+| 2.000.000 | 3.206 ms | 3.662 ms |
+
+`UPDATE` tanpa batch memang lebih dari 1 detik pada ukuran ini, sehingga mode batch bisa diuji
+dengan `batch_column=id` dan `batch_size=50000`. Setelah target ini dijalankan, tabel `zz_big`
+sudah ada; test yang membuat ulang tabel itu harus menjatuhkannya terlebih dahulu atau memakai
+tabel yang sudah diisi.
+
 ## Cara pakai singkat
 
 1. **Admin**: Koneksi -> tambah koneksi (pilih engine) -> Grup -> buat grup dan anggota -> atur akses database grup.

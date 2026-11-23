@@ -4,6 +4,7 @@
 TARGET_MARIADB_ADDR ?= 127.0.0.1:3307
 APP_ENCRYPTION_KEY ?= ViQIBs1QPisgpu5jmZ6xOAvG25UXZhzma/gdUag/afA=
 TARGET_DB_URL ?= postgres://app:app@127.0.0.1:5435/sample?sslmode=disable
+LARGE_ROWS ?= 2000000
 TEST_DATABASE_URL ?= postgres://postgres:postgres@127.0.0.1:5433/dbmp_test?sslmode=disable
 PKG ?= ./...
 
@@ -12,7 +13,7 @@ export TARGET_DB_URL
 export TEST_DATABASE_URL
 export TARGET_MARIADB_ADDR
 
-.PHONY: help up down reset-target run run-worker test test-unit test-integration web-install web-build web-dev build build-worker
+.PHONY: help up down reset-target seed-large run run-worker test test-unit test-integration web-install web-build web-dev build build-worker
 .PHONY: ... reset-mariadb
 
 help: 
@@ -31,7 +32,10 @@ reset-target:
 reset-mariadb:
 	docker compose rm -sfv target-mariadb
 	docker compose up -d --wait target-mariadb
-	
+
+seed-large: ## isi zz_big dengan LARGE_ROWS baris dan ukur durasi UPDATE penuh
+	LARGE_ROWS=$(LARGE_ROWS) bash scripts/seed-large.sh
+
 # Membaca .env (jika ada) dengan sintaks shell, jadi nilai berkutip dan karakter khusus aman.
 # Isi .env menimpa default di atas. Lihat .env.example.
 run: ## jalankan server (baca .env bila ada; ADMIN_PASSWORD wajib pada run pertama)
