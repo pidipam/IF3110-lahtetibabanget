@@ -72,7 +72,10 @@ type outcome struct {
 	sql       string // SQL yang benar-benar dijalankan (untuk history)
 	committed int    // batch committed (mode batch)
 	reverting bool   // sedang kompensasi/rollback batch
+	wait      bool
 }
+
+const waitDelay = 2 * time.Second
 
 func (h *Handler) locks() Locks { return Locks{Pool: h.Repo.Pool()} }
 
@@ -153,6 +156,14 @@ func (h *Handler) defer_(ctx context.Context, id int64, d time.Duration) error {
 func (h *Handler) finalize(ctx context.Context, e workflow.Execution, prev workflow.Status, out outcome) error {
 	lk := h.locks()
 	msg := errString(out.err)
+	if out.wait {
+		if err := h.Repo.MarkOutcome(ctx, e.ID, prev, ""); err != nil {
+			return err
+		}
+		_ = lk.Release(ctx, e.DatabaseID, e.ID)
+		h.log(ctx, e, "execution.waiting", "reason", "migration sebelumnya masih di antrean atau berjalan")
+		return h.defer_(ctx, e.ID, waitDelay)
+	}
 	if out.class != Success && out.class != Uncertain {
 		h.recordFailure(ctx, e, out, msg)
 	}
@@ -309,6 +320,15 @@ func (h *Handler) revalidate(ctx context.Context, e workflow.Execution, rev work
 		return outcome{class: Retryable, err: err}, true
 	}
 	if err := workflow.CheckRun(e.Kind, e.MigrationID, !rev.IsIrreversible, items); err != nil {
+		if errors.Is(err, workflow.ErrNotNextInLine) {
+			waiting, werr := h.earlierInFlight(ctx, e)
+			if werr != nil {
+				return outcome{class: Retryable, err: werr}, true
+			}
+			if waiting {
+				return outcome{wait: true}, true
+			}
+		}
 		return permMsg("revalidasi gagal: %v", err), true
 	}
 	return outcome{}, false
@@ -384,4 +404,15 @@ func errMsg(err error) string {
 		m = err.Error()
 	}
 	return m
+}
+
+func (h *Handler) earlierInFlight(ctx context.Context, e workflow.Execution) (bool, error) {
+	var ok bool
+	err := h.Repo.Pool().QueryRow(ctx, `SELECT EXISTS (
+		SELECT 1 FROM platform_migration_executions x
+		JOIN platform_migrations m ON m.id = x.migration_id
+		JOIN platform_migrations me ON me.id = $2
+		WHERE x.database_id = $1 AND x.id <> $3 AND x.status IN ('queued', 'running')
+		AND m.linear_order < me.linear_order)`, e.DatabaseID, e.MigrationID, e.ID).Scan(&ok)
+	return ok, err
 }
