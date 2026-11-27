@@ -83,6 +83,22 @@ Form koneksi memiliki tombol uji koneksi; password tidak pernah dikirim kembali 
 menampilkan NULL, sel terpotong, paginasi, dan scroll horizontal. Database target yang mati
 mengarahkan ke halaman `/app/error/503`.
 
+#### Pemeriksaan responsif (27 November 2026)
+
+Seluruh rute SPA dibuka lewat Chrome headless pada lebar 360 px dan 1280 px, masing-masing dengan
+pengguna yang sesuai (anonim, admin, editor, leader, viewer only) dan data nyata: migration sukses,
+gagal, rollback, forward, batch 2 juta baris, menunggu persetujuan, dan draft. Untuk setiap halaman
+diperiksa apakah dokumen melebar melebihi layar (`scrollWidth > innerWidth`), error JavaScript, dan
+request API yang gagal, lalu diambil screenshot.
+
+Hasil: 32 rute × 2 lebar, tidak ada halaman yang melebar dan tidak ada error JavaScript. Satu-satunya
+respons gagal adalah `401 /api/me` di halaman login, yang memang dipakai SPA untuk mengetahui bahwa
+pengguna belum login. Tabel data viewer, tabel riwayat, dan editor SQL bergulir di dalam komponennya
+sendiri pada 360 px. Rute yang diperiksa: login, sesi berakhir, beranda, koneksi (daftar, tambah,
+ubah), user (daftar, tambah, ubah), grup (daftar, tambah, detail), database (daftar, detail, viewer
+tabel), migration (daftar, buat, ubah draft, review), riwayat (dengan dan tanpa Hide rollback),
+detail eksekusi, schema diff, monitor job (sukses dan gagal), persetujuan leader, dan halaman error.
+
 ### Persetujuan migration
 
 Setiap eksekusi migration harus disetujui leader dari setiap grup yang punya akses ke database tujuan.
@@ -147,6 +163,33 @@ Bukti yang tercatat (PostgreSQL, diukur lewat `make seed-large`):
 dengan `batch_column=id` dan `batch_size=50000`. Setelah target ini dijalankan, tabel `zz_big`
 sudah ada; test yang membuat ulang tabel itu harus menjatuhkannya terlebih dahulu atau memakai
 tabel yang sudah diisi.
+
+#### Mode biasa dan mode batch pada dataset yang sama (27 November 2026)
+
+Dataset yang sama (`zz_big`, 2.000.000 baris; `make seed-large` kali ini mencatat isi data 3.473 ms
+dan satu `UPDATE` penuh 5.546 ms) dijalankan lewat alur lengkap: buat migration, ajukan, setujui
+leader, Jalankan, lalu dieksekusi worker.
+
+| Mode | SQL up | Batch | Row committed | Durasi worker |
+|---|---|---:|---:|---:|
+| Biasa | `UPDATE zz_big SET x = x + 1` | - | 2.000.000 (satu transaction) | 4.776 ms |
+| Per batch | `UPDATE zz_big SET x = x + 1 WHERE id IN (SELECT id FROM zz_big WHERE id > $1 ORDER BY id LIMIT $2) RETURNING id` | 40 × 50.000 | 2.000.000 | 24.903 ms |
+
+SQL down mode batch: `UPDATE zz_big SET x = x - 1 WHERE id > $1 AND id <= $2`. Mode batch lebih lama
+karena setiap batch adalah transaction tersendiri dengan checkpoint, tetapi tidak pernah mengunci
+seluruh tabel sekaligus dan progresnya (batch dan row) terlihat di monitor job.
+
+**Worker dimatikan di tengah batch.** Migration batch yang sama dijalankan lagi, lalu proses worker
+dihentikan paksa (`kill -9`) setelah 13 batch (650.000 row) committed. Checkpoint di
+`dbmp_meta.batch_checkpoint` saat itu berisi tepat 13 baris. Worker baru dijalankan:
+
+1. Sekitar 15 detik kemudian lease lock habis; pemulihan menandai eksekusi `uncertain` dan
+   menjadwalkannya ulang.
+2. Worker mengklaim eksekusi yang sama (percobaan ke-2) dan melanjutkan dari batch 14.
+3. Eksekusi selesai `success` dengan 40 batch dan 2.000.000 row.
+
+Bukti tidak ada batch yang diulang atau terlewat: `sum(x)` naik tepat 2.000.000 (dari 4.000.000 ke
+6.000.000) dan tabel checkpoint berisi 40 baris dengan `batch_no` 1 sampai 40 tanpa duplikat.
 
 ### Log SQL dan tracing
 
