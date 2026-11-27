@@ -287,7 +287,10 @@ func TestSchemaDiffSaveAsMigrationAndExecute(t *testing.T) {
 		t.Fatal("schema diff masih mengusulkan tabel yang sudah ada")
 	}
 	logs := f.e.log.String()
-	notContains(t, logs, "zz_sd_app_books", "CREATE TABLE", "desired_ddl", "password", "postgres://")
+	if !strings.Contains(logs, "zz_sd_app_books") {
+		t.Fatal("log eksekusi harus memuat SQL migration yang dijalankan")
+	}
+	notContains(t, logs, "desired_ddl", "password", "postgres://", secretPW)
 	notContains(t, logs, f.ed.session())
 }
 
