@@ -18,8 +18,10 @@ setiap perubahan dilakukan lewat migration yang tercatat.
   koneksi dibuat dan tidak dapat diubah. Password dienkripsi (AES-256-GCM), ada uji koneksi, dan
   kegagalan koneksi ditangani dengan halaman error yang aman.
 - **Database viewer**: schema, tabel, kolom, constraint, index, dan data (read-only, paginasi).
-- **Migration**: editor SQL, review sebelum eksekusi, eksekusi dalam transaction (commit/rollback),
-  versi linear per database, lock anti-paralel, statement timeout, dan riwayat.
+- **Migration**: SQL up/down atau irreversible dengan alasan, revisi immutable, review dan approval
+  leader setiap grup, eksekusi asynchronous lewat antrean dan worker (mode biasa dan per batch dengan
+  checkpoint), rollback dan forward, riwayat semua attempt dengan Hide rollback, serta pemulihan
+  ketika worker mati.
 - **Analisis execution plan (bonus)**: EXPLAIN dan EXPLAIN ANALYZE per statement di halaman review,
   ditampilkan sebagai pohon plan. Semua perubahan di-rollback. Khusus PostgreSQL.
 - **Schema diff (bonus)**: membandingkan schema database target dengan DDL kondisi yang diinginkan,
@@ -32,8 +34,9 @@ setiap perubahan dilakukan lewat migration yang tercatat.
 
 ## Teknologi
 
-Go (backend), PostgreSQL 16 (platform DB dan target), MariaDB 11 (target tambahan), `html/template`
-(bukan SPA), pgx, go-sql-driver/mysql, Docker Compose.
+Go (backend dan worker), PostgreSQL 16 (platform DB, antrean job, dan target), MariaDB 11 (target
+tambahan), SPA React + TypeScript + Vite + Tailwind, pgx, go-sql-driver/mysql, OpenTelemetry, Docker
+Compose.
 
 ## Prasyarat
 
@@ -44,7 +47,9 @@ Di beberapa mesin Docker membutuhkan `sudo`.
 
 ```bash
 make up                                    # platform-db :5434, test-db :5433, target-db (sampel PG) :5435, target-mariadb (sampel) :3307
+make web-build                             # build SPA (sekali, atau setelah frontend berubah)
 ADMIN_PASSWORD='ganti-password' make run   # run pertama membuat akun admin
+make run-worker                            # terminal lain; atau pakai service worker dari make up
 ```
 
 Buka http://localhost:8080 dan login sebagai `admin` dengan password tadi. Schema platform
@@ -264,15 +269,22 @@ Analisis per level beban dibaca dengan cara berikut:
 
 ## Cara pakai singkat
 
-1. **Admin**: Koneksi -> tambah koneksi (pilih engine) -> Grup -> buat grup dan anggota -> atur akses database grup.
-2. **User**: Database -> pilih database -> lihat struktur dan data -> Migration -> buat draft, tinjau, jalankan.
-3. **Schema diff (View + Edit)**: Database -> Schema diff -> pilih schema -> ubah DDL kondisi yang
-   diinginkan -> Bandingkan -> periksa perbedaan dan SQL -> edit bila perlu -> simpan sebagai draft
-   migration. Draft tersebut kemudian ditinjau dan dijalankan lewat halaman Migration.
+1. **Admin**: Koneksi -> tambah koneksi (pilih engine) -> Grup -> buat grup, anggota, dan leader ->
+   atur akses database grup. Admin baru melihat database di halaman Database dan Migration bila ia
+   sendiri anggota grup yang punya akses.
+2. **Pengaju (View + Edit)**: Migration -> pilih database -> buat migration (SQL up dan down, atau
+   irreversible dengan alasan; mode biasa atau per batch) -> ajukan review.
+3. **Leader setiap grup yang punya akses**: Persetujuan -> setujui atau tolak revisi tersebut.
+4. **Pengaju**: setelah Approved, tekan Jalankan. Halaman monitor job menampilkan status, batch dan
+   row yang sudah committed, serta tombol retry, resume, cancel, rollback, atau forward yang diizinkan.
+   Rollback dan forward juga melewati review dan approval.
+5. **Riwayat**: Migration -> Riwayat; centang Hide rollback untuk menyembunyikan pasangan eksekusi
+   yang sudah di-rollback.
+6. **Schema diff (View + Edit)**: Migration -> Schema diff -> ubah DDL kondisi yang diinginkan ->
+   Bandingkan -> edit SQL bila perlu -> simpan sebagai draft migration.
 
-Halaman migration: `/databases/{id}/migrations` (tombol "Migration" di halaman database).
-Halaman schema diff: `/databases/{id}/schema-diff` (tombol "Schema diff" di halaman database,
-hanya untuk View + Edit).
+Server (`make run`) dan worker (`make run-worker` atau service `worker` dari `make up`) harus
+berjalan; tanpa worker, job tetap berstatus Pending (Queue).
 
 ## Keputusan desain
 
@@ -303,19 +315,22 @@ hanya untuk View + Edit).
 
 | Keputusan | Pilihan |
 |---|---|
-| Pemberian versi | Saat eksekusi dimulai, di bawah lock: `MAX(version)+1` per database. Draft belum punya versi, sehingga versi linear tanpa celah. |
-| Migration gagal | Tetap memakai nomor versinya dan tampil di riwayat sebagai gagal. Untuk mencoba ulang, buat draft baru. |
-| Yang boleh diedit | Hanya draft. Migration yang sudah dijalankan tidak berubah. |
-| Eksekusi | Satu transaction di database target: commit bila seluruh SQL berhasil, rollback bila ada yang gagal. Pada MySQL/MariaDB, DDL tidak dapat di-rollback (lihat bagian MySQL/MariaDB). |
-| Statement timeout | 30 detik (`SET LOCAL statement_timeout`); menunggu lock tabel maksimal 10 detik (`lock_timeout`). Nilai ada di kode, tidak diatur lewat environment. |
-| Eksekusi paralel | Advisory lock per database di platform DB. Jika sudah dipegang, eksekusi kedua langsung ditolak (HTTP 409) dan migration tetap draft. |
-| Target tidak dapat dihubungi | Dicek sebelum nomor versi dipakai; migration tetap draft dan user melihat halaman 503 tanpa host/port. |
-| Proses mati saat eksekusi | Saat startup, migration berstatus "running" diubah menjadi gagal. |
-| Peninjauan | Halaman review membawa checksum SQL; bila SQL berubah sebelum dijalankan, eksekusi ditolak (409). |
+| Alur status | Draft → Pending Review → Approved → Pending (Queue) → Running → Success / Failed. Rollback dan forward juga melewati review dan approval. |
+| Urutan linear | Nomor urut per database diberikan saat migration pertama kali diajukan untuk review. Migration yang ditolak atau dibatalkan sebelum pernah berjalan melepas nomornya; yang gagal tetap memegangnya. Posisi aktif = eksekusi sukses terakhir yang belum di-rollback. |
+| Revisi | SQL up dan down (atau irreversible dengan alasan wajib) disimpan per revisi beserta checksum. Tabel revisi append-only (trigger). Mengubah SQL membuat revisi baru dan persetujuan lama tidak berlaku. |
+| Eksekusi | Selalu asynchronous: API mengembalikan `202` dan `job_id`, worker (`cmd/worker`) mengambil job dari antrean PostgreSQL (`FOR UPDATE SKIP LOCKED`, lease, dan heartbeat). Mode biasa memakai satu transaction; mode batch memakai satu transaction per batch dengan checkpoint di `dbmp_meta` pada database target, ditulis dalam transaction yang sama. |
+| Rollback dan forward | Rollback hanya untuk migration aktif terakhir yang reversible, memakai SQL down asli revisi yang dieksekusi, dan merujuk execution ID yang dibatalkannya. Forward menjalankan ulang SQL up revisi yang sama dan tidak menjalankan migration berikutnya. |
+| Migration history | Mencatat semua attempt, berhasil maupun gagal (spesifikasi v4): migration, execution ID, revisi, pengguna, waktu, status, attempt, dan salinan SQL yang dijalankan. Tabel append-only. Hanya baris sukses yang mengubah posisi aktif. Hide rollback menyembunyikan pasangan sukses (eksekusi dan rollback-nya) berdasarkan execution ID; attempt gagal selalu tampil. |
+| Migration gagal | Tetap memegang nomor urutnya dan tercatat di history. Boleh dijalankan lagi atau dilewati oleh migration berikutnya. |
+| Statement timeout | 15 menit per transaction (`SET LOCAL statement_timeout`), menunggu lock tabel maksimal 10 detik (`lock_timeout`). |
+| Konkurensi | Satu database hanya menjalankan satu migration (baris lock per database di platform DB dengan lease dan heartbeat, ditambah unique index status sibuk). Database berbeda dapat berjalan paralel di worker berbeda. Status `partial` dan `uncertain` menahan migration berikutnya pada database yang sama. |
+| Worker mati | Lease lock habis → eksekusi `running` ditandai `uncertain` dan dijadwalkan ulang. Worker memeriksa marker di `dbmp_meta.execution_marker` (ditulis dalam transaction migration) sebelum mengulang: ada marker berarti sudah commit, sehingga tidak terjadi commit ganda. Mode batch melanjutkan dari checkpoint terakhir. |
+| Retry | Kegagalan sementara diulang dengan jeda bertingkat dan batas attempt (`WORKER_MAX_ATTEMPTS`). Pesan antrean duplikat tidak menjalankan eksekusi dua kali karena eksekusi diklaim berdasarkan statusnya. |
+| Peninjauan | Approval terikat pada revisi; worker memvalidasi ulang checksum, persetujuan, hak akses pengaju, dan posisi aktif sebelum menjalankan SQL. |
 | Validasi | Judul wajib (maks 100 karakter), SQL wajib (maks 100 KB). `BEGIN`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `START TRANSACTION` ditolak karena transaction dikelola platform. |
 | Hak akses | Lihat riwayat dan detail: View Only. Buat, edit, tinjau, jalankan: View + Edit. Dicek di backend pada setiap request. |
 | Hapus koneksi | Diblokir bila punya riwayat migration (foreign key `RESTRICT`, HTTP 409). |
-| Logging | Hanya id (user, database, migration) dan status. SQL, password, dan session id tidak dicatat. |
+| Logging | Log JSON untuk setiap attempt dan setiap query SQL, dengan trace_id/span_id (lihat "Log SQL dan tracing"). Password, kredensial di SQL, dan session id disamarkan. |
 | EXPLAIN / EXPLAIN ANALYZE | Hanya untuk draft dan butuh View + Edit. Dijalankan per statement dalam satu transaction yang selalu di-rollback, dengan timeout yang sama. Statement DDL dijalankan sementara agar statement berikutnya bisa dianalisis. |
 
 ### Schema diff
@@ -361,11 +376,8 @@ hanya untuk View + Edit).
 - "Test connection" membuat server menyambung ke host yang diisi admin (hanya admin).
 - Tidak ada pembatasan percobaan login (rate limit); bcrypt memperlambat tebakan tetapi tidak memblokirnya.
 - `sslmode` bawaan form adalah `prefer`, yang boleh jatuh ke koneksi tanpa enkripsi. Untuk server jauh pakai `require` atau `verify-full`.
-- Pemulihan migration "running" saat startup mengasumsikan satu instance aplikasi.
-- Eksekusi berjalan sinkron di request HTTP tanpa indikator progres. Jika browser terputus, migration dibatalkan dan tercatat gagal.
 - Perintah yang tidak boleh berjalan dalam transaction (mis. `CREATE INDEX CONCURRENTLY`, `VACUUM`) akan gagal dan di-rollback.
 - Rollback hanya membatalkan perubahan transaksional; nilai sequence yang sudah terpakai tidak dikembalikan.
-  Migration yang sudah di-commit tidak dapat dibatalkan; buat migration baru untuk membalikkannya.
 - Schema diff hanya mengenali tabel biasa, kolom, constraint, index, view, enum, dan sequence. Partitioned
   table, materialized view, foreign table, trigger, function/procedure, extension, comment, owner,
   privilege/grant, serta RLS/policy tidak didiff sehingga perubahannya tidak terdeteksi dan tidak dibuatkan SQL.
@@ -408,7 +420,13 @@ internal/explorer     introspeksi schema dan viewer data (PostgreSQL dan MySQL/M
 internal/migration    migration: repository, service, executor, sesi eksekusi per engine
 internal/schemadiff   diff schema dan generator SQL migration
 internal/platformdb   koneksi dan migrasi schema platform
-internal/web          renderer dan template
+internal/queue        antrean job PostgreSQL (dipakai server dan worker)
+internal/obs          logger JSON, OpenTelemetry, pembungkus antrean; obs/sqltrace mencatat setiap query
+internal/approval     persetujuan leader per grup
+internal/migration/workflow  model, status, posisi aktif, history (Milestone 2)
+internal/migration/exec      handler worker: lock, eksekusi normal dan batch, pemulihan
+cmd/worker            proses worker antrean
+web                   SPA (Vite, React, TypeScript, Tailwind), di-embed ke binary server
 internal/testutil     helper test
 internal/db           seed database sampel (PostgreSQL dan MariaDB)
 ```
