@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 func main() {
 	cfg := config.Load()
 	logger := obs.NewLogger(cfg.LogLevel)
+	slog.SetDefault(logger)
 	if err := run(cfg, logger); err != nil {
 		logger.Error("worker stopped", "error", err.Error())
 		os.Exit(1)
@@ -91,45 +93,88 @@ func run(cfg config.Config, logger *slog.Logger) error {
 		workerID = fmt.Sprintf("%s-%d", host, os.Getpid())
 	}
 
-	handler := &exec.Handler{
-		Repo:      deps.Repo,
-		Targets:   deps.Targets,
-		Access:    deps.Access,
-		Approvals: deps.Approvals,
-		Queue:     jobs,
-		Log:       logger,
-		WorkerID:  workerID,
-		Lease:     lease,
+	newHandler := func(id string) *exec.Handler {
+		return &exec.Handler{
+			Repo:      deps.Repo,
+			Targets:   deps.Targets,
+			Access:    deps.Access,
+			Approvals: deps.Approvals,
+			Queue:     jobs,
+			Log:       logger,
+			WorkerID:  id,
+			Lease:     lease,
+		}
 	}
+	recovery := newHandler(workerID)
 
 	if n, err := rawJobs.Recover(ctx); err != nil {
 		return fmt.Errorf("recover jobs: %w", err)
 	} else if n > 0 {
 		logger.Warn("job dengan lease kedaluwarsa ditandai gagal", "jumlah", n)
 	}
-	if _, err := handler.RecoverStale(ctx); err != nil {
+	if _, err := recovery.RecoverStale(ctx); err != nil {
 		return fmt.Errorf("recover eksekusi: %w", err)
 	}
-	go handler.RunRecovery(ctx, recoveryEvery)
+	go recovery.RunRecovery(ctx, recoveryEvery)
 	go runJobRecovery(ctx, rawJobs, recoveryEvery, logger)
 
-	logger.Info("worker berjalan", "worker", workerID, "lease", lease.String(), "poll", poll.String())
+	slots := cfg.WorkerConcurrency
+	if slots < 1 {
+		slots = 1
+	}
+	logger.Info("worker berjalan", "worker", workerID, "concurrency", slots, "lease", lease.String(), "poll", poll.String())
+	jobCtx, cancelJobs := context.WithCancel(context.WithoutCancel(ctx))
+	defer cancelJobs()
+	var wg sync.WaitGroup
+	for i := 1; i <= slots; i++ {
+		id := fmt.Sprintf("%s/%d", workerID, i)
+		h := newHandler(id)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			runSlot(ctx, jobCtx, h, rawJobs, id, lease, poll, cfg.WorkerMaxAttempts, logger)
+		}()
+	}
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+	}
+	drain := cfg.WorkerDrainTimeout
+	logger.Info("worker berhenti: menunggu job yang sedang berjalan", "event", "worker.draining", "timeout", drain.String())
+	select {
+	case <-done:
+		logger.Info("worker berhenti: semua job selesai", "event", "worker.drained")
+	case <-time.After(drain):
+		logger.Warn("worker berhenti: batas waktu habis, job dibatalkan dan akan dipulihkan", "event", "worker.drain_timeout")
+		cancelJobs()
+		<-done
+	}
+	return nil
+}
+
+func runSlot(ctx, jobCtx context.Context, handler *exec.Handler, jobs *queue.Store, slotID string, lease, poll time.Duration, maxAttempts int, logger *slog.Logger) {
 	ticker := time.NewTicker(poll)
 	defer ticker.Stop()
 	for {
-		job, err := rawJobs.Claim(ctx, workerID, lease)
+		job, err := jobs.Claim(ctx, slotID, lease)
 		if err != nil {
 			if ctx.Err() != nil {
-				return nil
+				return
 			}
-			logger.Error("claim job gagal", "error", err.Error())
+			logger.Error("claim job gagal", "worker", slotID, "error", err.Error())
 		} else if job != nil {
-			process(ctx, handler, rawJobs, job, workerID, lease, cfg.WorkerMaxAttempts, logger)
+			process(jobCtx, handler, jobs, job, slotID, lease, maxAttempts, logger)
 			continue
 		}
 		select {
 		case <-ctx.Done():
-			return nil
+			return
 		case <-ticker.C:
 		}
 	}

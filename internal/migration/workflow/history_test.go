@@ -58,3 +58,19 @@ func TestHideRollbackNoRollbackKeepsAll(t *testing.T) {
 		t.Fatal("nil aman")
 	}
 }
+
+// v4: attempt gagal tidak menyembunyikan dan tidak disembunyikan oleh pasangan rollback.
+func TestHideRollbackKeepsFailedAttempts(t *testing.T) {
+	e2 := int64(2)
+	in := []HistoryEntry{
+		{ExecutionID: 1, Kind: KindUp, Status: StatusSuccess},
+		{ExecutionID: 2, Kind: KindUp, Status: StatusFailed, Attempt: 1},
+		{ExecutionID: 2, Kind: KindUp, Status: StatusSuccess, Attempt: 2},
+		{ExecutionID: 3, Kind: KindRollback, Status: StatusSuccess, RevertedExecutionID: &e2},
+		{ExecutionID: 4, Kind: KindRollback, Status: StatusFailed},
+	}
+	out := HideRollback(in)
+	if len(out) != 3 || out[0].ExecutionID != 1 || out[1].Status != StatusFailed || out[2].ExecutionID != 4 {
+		t.Fatalf("hanya pasangan sukses yang disembunyikan: %+v", out)
+	}
+}

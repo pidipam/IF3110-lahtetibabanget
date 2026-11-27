@@ -64,4 +64,6 @@ type HistoryEntry struct {
 	ExecutedAt          time.Time
 	SQLExecuted         string
 	RevertedExecutionID *int64
+	Attempt             int
+	Error               string
 }

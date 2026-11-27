@@ -313,6 +313,9 @@ type historyDTO struct {
 	ExecutedAt          string `json:"executed_at"`
 	SQLExecuted         string `json:"sql_executed"`
 	RevertedExecutionID string `json:"reverted_execution_id,omitempty"`
+	Status              string `json:"status"`
+	Attempt             int    `json:"attempt"`
+	ErrorMessage        string `json:"error_message,omitempty"`
 }
 
 var typeLabel = map[workflow.Kind]string{workflow.KindUp: "APPLY", workflow.KindRollback: "ROLLBACK", workflow.KindForward: "FORWARD"}
@@ -336,8 +339,9 @@ func (h *Handler) historyAll(ctx context.Context, uid, dbID int64, hide bool) ([
 		x := hs[i]
 		d := historyDTO{ExecutionID: idStr(x.ExecutionID), MigrationID: idStr(x.MigrationID),
 			RevisionID: idStr(x.MigrationID) + "-" + strconv.Itoa(x.RevisionNumber), ExecutionType: typeLabel[x.ExecutionType],
-			ExecutedBy: names[x.ExecutedBy], ExecutedAt: iso(x.ExecutedAt), SQLExecuted: x.SQLExecuted}
-		if x.RevertedExecutionID != nil {
+			ExecutedBy: names[x.ExecutedBy], ExecutedAt: iso(x.ExecutedAt), SQLExecuted: x.SQLExecuted,
+			Status: string(x.Status), Attempt: x.Attempt, ErrorMessage: x.ErrorMessage}
+		if x.RevertedExecutionID != nil && x.Status == workflow.StatusSuccess { // attempt gagal tidak membatalkan apa pun
 			d.RevertedExecutionID = idStr(*x.RevertedExecutionID)
 		}
 		out = append(out, d)
@@ -417,7 +421,7 @@ func tp(t *time.Time) *string {
 	if t == nil {
 		return nil
 	}
-	s := iso(*t)
+	s := t.UTC().Format("2006-01-02T15:04:05.000Z07:00")
 	return &s
 }
 

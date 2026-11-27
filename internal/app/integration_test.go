@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -41,7 +42,45 @@ func setupWith(t *testing.T, secure bool) *testEnv {
 	}
 	a.Sessions.Now = func() time.Time { return env.now }
 	env.app = a
+	cleanupTargetMeta(t, db)
 	return env
+}
+
+func cleanupTargetMeta(t *testing.T, platform *pgxpool.Pool) {
+	url := os.Getenv(testutil.EnvTargetDB)
+	if url == "" {
+		return
+	}
+	since := time.Now().Add(-time.Second)
+	t.Cleanup(func() {
+		ctx := context.Background()
+		var ids []int64
+		rows, err := platform.Query(ctx, "SELECT id FROM platform_migration_executions")
+		if err != nil {
+			return
+		}
+		for rows.Next() {
+			var id int64
+			if rows.Scan(&id) == nil {
+				ids = append(ids, id)
+			}
+		}
+		rows.Close()
+		if len(ids) == 0 {
+			return
+		}
+		target, err := pgxpool.New(ctx, url)
+		if err != nil {
+			return
+		}
+		defer target.Close()
+		var exists bool
+		if target.QueryRow(ctx, "SELECT to_regclass('dbmp_meta.execution_marker') IS NOT NULL").Scan(&exists) != nil || !exists {
+			return
+		}
+		_, _ = target.Exec(ctx, "DELETE FROM dbmp_meta.execution_marker WHERE execution_id = ANY($1) AND committed_at >= $2", ids, since)
+		_, _ = target.Exec(ctx, "DELETE FROM dbmp_meta.batch_checkpoint WHERE execution_id = ANY($1) AND committed_at >= $2", ids, since)
+	})
 }
 
 func (e *testEnv) advance(d time.Duration) {

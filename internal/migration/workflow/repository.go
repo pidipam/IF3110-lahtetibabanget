@@ -168,7 +168,9 @@ func (r *Repository) Items(ctx context.Context, q interface {
 }, dbID int64) ([]Item, error) {
 	rows, err := q.Query(ctx, `SELECT m.id, m.linear_order,
 		COALESCE((SELECT h.execution_type FROM platform_migration_history h
-			WHERE h.migration_id=m.id ORDER BY h.execution_id DESC LIMIT 1), '')
+			WHERE h.migration_id=m.id AND h.status='success' ORDER BY h.execution_id DESC LIMIT 1), ''),
+		COALESCE((SELECT e.status='failed' FROM platform_migration_executions e
+			WHERE e.migration_id=m.id AND e.status NOT IN ('rejected','cancelled') ORDER BY e.id DESC LIMIT 1), false)
 		FROM platform_migrations m WHERE m.database_id=$1 AND m.linear_order IS NOT NULL ORDER BY m.linear_order`, dbID)
 	if err != nil {
 		return nil, err
@@ -178,11 +180,12 @@ func (r *Repository) Items(ctx context.Context, q interface {
 	for rows.Next() {
 		var it Item
 		var last string
-		if err := rows.Scan(&it.ID, &it.Order, &last); err != nil {
+		if err := rows.Scan(&it.ID, &it.Order, &last, &it.Failed); err != nil {
 			return nil, err
 		}
 		it.EverRun = last != ""
 		it.Active = last == string(KindUp) || last == string(KindForward)
+		it.Failed = it.Failed && !it.Active
 		out = append(out, it)
 	}
 	return out, rows.Err()
@@ -246,7 +249,7 @@ func (r *Repository) RequestExecution(ctx context.Context, dbID, migID, userID i
 		var hid int64
 		var hrev int
 		if err := tx.QueryRow(ctx, `SELECT execution_id, revision_number FROM platform_migration_history
-			WHERE migration_id=$1 ORDER BY execution_id DESC LIMIT 1`, migID).Scan(&hid, &hrev); err != nil {
+			WHERE migration_id=$1 AND status='success' ORDER BY execution_id DESC LIMIT 1`, migID).Scan(&hid, &hrev); err != nil {
 			return Execution{}, err
 		}
 		v, err := scanRev(tx.QueryRow(ctx, `SELECT `+revCols+` FROM platform_migration_revisions WHERE migration_id=$1 AND revision_number=$2`, migID, hrev))
@@ -349,7 +352,7 @@ func (r *Repository) releaseOrderIfNeverRun(ctx context.Context, e Execution) {
 		return
 	}
 	_, _ = r.pool.Exec(ctx, `UPDATE platform_migrations SET linear_order=NULL, updated_at=now()
-		WHERE id=$1 AND NOT EXISTS (SELECT 1 FROM platform_migration_history WHERE migration_id=$1)
+		WHERE id=$1 AND NOT EXISTS (SELECT 1 FROM platform_migration_history WHERE migration_id=$1 AND status='success')
 		AND NOT EXISTS (SELECT 1 FROM platform_migration_executions WHERE migration_id=$1
 			AND status IN ('pending_review','approved','queued','running','partial','uncertain','partially_reverted'))`, e.MigrationID)
 }
@@ -359,12 +362,13 @@ func (r *Repository) SetJobID(ctx context.Context, id int64, jobID string) error
 	return err
 }
 
-// ListHistory mengembalikan eksekusi sukses (urut waktu).
+// ListHistory mengembalikan semua attempt (sukses dan gagal), urut waktu. Spesifikasi M2 v4.
 func (r *Repository) ListHistory(ctx context.Context, dbID int64) ([]HistoryEntry, error) {
 	rows, err := r.pool.Query(ctx, `SELECT h.execution_id, h.migration_id, m.title, h.database_id, h.revision_number,
-		h.execution_type, h.status, h.executed_by, h.executed_at, h.sql_executed, h.reverted_execution_id
+		h.execution_type, h.status, h.executed_by, h.executed_at, h.sql_executed, h.reverted_execution_id,
+		h.attempt, h.error_message
 		FROM platform_migration_history h JOIN platform_migrations m ON m.id=h.migration_id
-		WHERE h.database_id=$1 ORDER BY h.executed_at, h.execution_id`, dbID)
+		WHERE h.database_id=$1 ORDER BY h.executed_at, h.id`, dbID)
 	if err != nil {
 		return nil, err
 	}
@@ -374,7 +378,7 @@ func (r *Repository) ListHistory(ctx context.Context, dbID int64) ([]HistoryEntr
 		var h HistoryEntry
 		var k, s string
 		if err := rows.Scan(&h.ExecutionID, &h.MigrationID, &h.MigrationTitle, &h.DatabaseID, &h.RevisionNumber,
-			&k, &s, &h.ExecutedBy, &h.ExecutedAt, &h.SQLExecuted, &h.RevertedExecutionID); err != nil {
+			&k, &s, &h.ExecutedBy, &h.ExecutedAt, &h.SQLExecuted, &h.RevertedExecutionID, &h.Attempt, &h.Error); err != nil {
 			return nil, err
 		}
 		h.Kind, h.Status = Kind(k), Status(s)
@@ -447,9 +451,9 @@ func (r *Repository) FinishSuccess(ctx context.Context, e Execution, sql string)
 	}
 	defer tx.Rollback(ctx)
 	if _, err := tx.Exec(ctx, `INSERT INTO platform_migration_history
-		(execution_id, migration_id, database_id, revision_number, execution_type, executed_by, sql_executed, reverted_execution_id)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (execution_id) DO NOTHING`,
-		e.ID, e.MigrationID, e.DatabaseID, e.RevisionNumber, string(e.Kind), e.RequestedBy, sql, e.UndoesExecution); err != nil {
+		(execution_id, migration_id, database_id, revision_number, execution_type, executed_by, sql_executed, reverted_execution_id, status, attempt)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'success',$9) ON CONFLICT (execution_id) WHERE status='success' DO NOTHING`,
+		e.ID, e.MigrationID, e.DatabaseID, e.RevisionNumber, string(e.Kind), e.RequestedBy, sql, e.UndoesExecution, e.Attempt); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(ctx, `UPDATE platform_migration_executions SET status='success', executed_sql=$2, error_message='',
@@ -460,6 +464,17 @@ func (r *Repository) FinishSuccess(ctx context.Context, e Execution, sql string)
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+// RecordFailedAttempt mencatat attempt gagal ke migration history (spesifikasi v4: semua attempt tercatat).
+// Idempoten per (execution_id, attempt). Rujukan rollback hanya diisi pada attempt sukses.
+func (r *Repository) RecordFailedAttempt(ctx context.Context, e Execution, sql, msg string) error {
+	ctx = context.WithoutCancel(ctx)
+	_, err := r.pool.Exec(ctx, `INSERT INTO platform_migration_history
+		(execution_id, migration_id, database_id, revision_number, execution_type, executed_by, sql_executed, reverted_execution_id, status, attempt, error_message)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'failed',$9,$10) ON CONFLICT (execution_id, attempt) DO NOTHING`,
+		e.ID, e.MigrationID, e.DatabaseID, e.RevisionNumber, string(e.Kind), e.RequestedBy, sql, e.UndoesExecution, e.Attempt, truncate(msg, 1000))
+	return err
 }
 
 func truncate(s string, n int) string {

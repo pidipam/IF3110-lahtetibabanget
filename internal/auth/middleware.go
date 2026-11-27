@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/authz"
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/obs/actor"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/users"
 )
 
@@ -81,6 +82,9 @@ func (m *Manager) LoadSession(next http.Handler) http.Handler {
 				return
 			}
 			id.CSRF = token
+		}
+		if id.User != nil {
+			ctx = actor.Set(ctx, id.User.ID)
 		}
 		ctx = context.WithValue(ctx, ctxKey{}, id)
 		r = r.WithContext(ctx)

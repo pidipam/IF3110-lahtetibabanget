@@ -1,9 +1,9 @@
 import { Link, Navigate } from "react-router";
 import { Badge } from "../../components/Badge";
-import { EmptyState } from "../../components/EmptyState";
 import { PageHeader } from "../../components/PageHeader";
 import { useCurrentUser } from "../../lib/currentUser";
 import { levelLabel } from "../../lib/session";
+import { NoDatabaseAccess } from "../database/NoDatabaseAccess";
 
 const engineLabel: Record<string, string> = { postgres: "PostgreSQL", mysql: "MySQL", mariadb: "MariaDB" };
 
@@ -16,7 +16,7 @@ export function DatabasePickerPage() {
         <div className="space-y-6">
             <PageHeader title="Migration" />
             {me.databases.length === 0 ? (
-                <EmptyState title="Belum ada akses database." description="Minta admin menambahkan Anda ke grup yang punya akses database." />
+                <NoDatabaseAccess isAdmin={me.is_admin} />
             ) : (
                 <ul aria-label="Database" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {me.databases.map((d) => (

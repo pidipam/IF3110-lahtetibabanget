@@ -135,6 +135,10 @@ export type HistoryItem = {
     executed_at: string;
     sql_executed: string;
     reverted_execution_id?: string;
+    /** Spesifikasi v4: attempt gagal tetap tercatat. Backend lama/mock boleh tidak mengirimnya (dianggap success). */
+    status?: "success" | "failed";
+    attempt?: number;
+    error_message?: string;
 };
 
 export type HistoryQuery = {

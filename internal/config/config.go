@@ -22,6 +22,8 @@ type Config struct {
 	WorkerLease            time.Duration
 	WorkerPollInterval     time.Duration
 	WorkerMaxAttempts      int
+	WorkerConcurrency      int
+	WorkerDrainTimeout     time.Duration
 	WorkerRecoveryInterval time.Duration
 	LogLevel               string
 	ServiceName            string
@@ -44,6 +46,8 @@ func Load() Config {
 		WorkerLease:            duration("WORKER_LEASE", 30*time.Second),
 		WorkerPollInterval:     duration("WORKER_POLL_INTERVAL", 250*time.Millisecond),
 		WorkerMaxAttempts:      intEnv("WORKER_MAX_ATTEMPTS", 5),
+		WorkerConcurrency:      intEnv("WORKER_CONCURRENCY", 4),
+		WorkerDrainTimeout:     duration("WORKER_DRAIN_TIMEOUT", 30*time.Second),
 		WorkerRecoveryInterval: duration("WORKER_RECOVERY_INTERVAL", 15*time.Second),
 		LogLevel:               env("LOG_LEVEL", "info"),
 		ServiceName:            env("OTEL_SERVICE_NAME", "dbmp"),

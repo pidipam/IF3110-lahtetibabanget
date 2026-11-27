@@ -45,6 +45,7 @@ FROM pg_constraint con
 JOIN pg_class c ON c.oid = con.conrelid
 JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE con.contype IN ('p','u','f','c') AND c.relkind IN ` + relkinds + ` AND ` + schemaFilter + `
+  AND pg_get_constraintdef(con.oid) IS NOT NULL
 ORDER BY n.nspname, c.relname, con.conname`
 
 	qIndexes = `SELECT n.nspname, t.relname, i.relname, pg_get_indexdef(ix.indexrelid), ix.indisunique, ix.indisprimary
@@ -53,6 +54,7 @@ JOIN pg_class i ON i.oid = ix.indexrelid
 JOIN pg_class t ON t.oid = ix.indrelid
 JOIN pg_namespace n ON n.oid = t.relnamespace
 WHERE t.relkind IN ` + relkinds + ` AND ` + schemaFilter + `
+  AND pg_get_indexdef(ix.indexrelid) IS NOT NULL
 ORDER BY n.nspname, t.relname, i.relname`
 )
 
@@ -90,19 +92,39 @@ func introspect(ctx context.Context, q Querier) (*Catalog, error) {
 	}
 	cons, err := collect(ctx, q, qConstraints, func(r pgx.Rows) (rawConstraint, error) {
 		var c rawConstraint
-		return c, r.Scan(&c.Schema, &c.Table, &c.Name, &c.Contype, &c.Def, &c.Columns)
+		var def *string
+		err := r.Scan(&c.Schema, &c.Table, &c.Name, &c.Contype, &def, &c.Columns)
+		if def != nil {
+			c.Def = *def
+		}
+		return c, err
 	})
 	if err != nil {
 		return nil, err
 	}
 	idxs, err := collect(ctx, q, qIndexes, func(r pgx.Rows) (rawIndex, error) {
 		var i rawIndex
-		return i, r.Scan(&i.Schema, &i.Table, &i.Name, &i.Def, &i.Unique, &i.Primary)
+		var def *string
+		err := r.Scan(&i.Schema, &i.Table, &i.Name, &def, &i.Unique, &i.Primary)
+		if def != nil {
+			i.Def = *def
+		}
+		return i, err
 	})
 	if err != nil {
 		return nil, err
 	}
-	return assemble(schemas, tables, cols, cons, idxs), nil
+	return assemble(schemas, tables, cols, withDef(cons, func(c rawConstraint) string { return c.Def }), withDef(idxs, func(i rawIndex) string { return i.Def })), nil
+}
+
+func withDef[T any](items []T, def func(T) string) []T {
+	out := items[:0]
+	for _, it := range items {
+		if def(it) != "" {
+			out = append(out, it)
+		}
+	}
+	return out
 }
 
 func collect[T any](ctx context.Context, q Querier, sql string, scan func(pgx.Rows) (T, error)) ([]T, error) {

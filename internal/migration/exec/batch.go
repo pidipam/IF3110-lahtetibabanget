@@ -62,12 +62,15 @@ type batchErr struct {
 }
 
 func (h *Handler) oneBatch(ctx context.Context, pool *pgxpool.Pool, e workflow.Execution, rev workflow.Revision, no int, cursor int64) (int, int64, *batchErr) {
+	ctx, sp := startSpan(ctx, "batch.execute")
+	defer sp.End()
 	tx, err := h.beginTx(ctx, pool)
 	if err != nil {
 		return 0, 0, &batchErr{err: err}
 	}
 	rb := func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }
 	t0 := time.Now()
+	h.log(ctx, e, "batch.start", "batch", no, "query", logSQL(rev.SQLUp), "params", []int64{cursor, int64(rev.BatchSize)})
 	rows, err := tx.Query(ctx, rev.SQLUp, cursor, int64(rev.BatchSize))
 	if err != nil {
 		rb()

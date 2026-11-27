@@ -58,13 +58,17 @@ services:
   worker:
     build: .
     command: ["worker"]
+    network_mode: host
+    stop_grace_period: 40s
     environment:
-      DATABASE_URL: postgres://postgres:postgres@platform-db:5432/dbmp?sslmode=disable
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5434/dbmp?sslmode=disable
       APP_ENCRYPTION_KEY: ViQIBs1QPisgpu5jmZ6xOAvG25UXZhzma/gdUag/afA=
       WORKER_ID: compose-worker-1
       WORKER_LEASE: 30s
       WORKER_POLL_INTERVAL: 250ms
       WORKER_MAX_ATTEMPTS: 5
+      WORKER_CONCURRENCY: 4
+      WORKER_DRAIN_TIMEOUT: 30s
       WORKER_RECOVERY_INTERVAL: 15s
       LOG_LEVEL: info
       OTEL_SERVICE_NAME: dbmp

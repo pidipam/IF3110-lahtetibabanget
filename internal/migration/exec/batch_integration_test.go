@@ -64,8 +64,8 @@ func TestBatchPartialThenResumeWithoutRework(t *testing.T) {
 	if r.count(`SELECT count(*) FROM zz_big WHERE x=1`) != 2000 {
 		t.Fatal("batch 1-2 tetap committed, batch 3 di-rollback")
 	}
-	if r.hist() != 0 || r.locks() != 1 {
-		t.Fatalf("partial: tanpa history, lock ditahan (hist=%d locks=%d)", r.hist(), r.locks())
+	if r.hist() != 0 || r.histFailed() != 1 || r.locks() != 1 {
+		t.Fatalf("partial: tanpa history sukses, 1 attempt gagal tercatat, lock ditahan (hist=%d failed=%d locks=%d)", r.hist(), r.histFailed(), r.locks())
 	}
 	// migration berikutnya pada database yang sama harus menunggu
 	other := r.ready(r.mig("B", "SELECT 1", "SELECT 1"))

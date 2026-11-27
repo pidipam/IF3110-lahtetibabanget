@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/migration/workflow"
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/obs/actor"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/queue"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -31,7 +32,37 @@ func newLogger(level string, w io.Writer) *slog.Logger {
 	if err := l.UnmarshalText([]byte(level)); err != nil {
 		l = slog.LevelInfo
 	}
-	return slog.New(slog.NewJSONHandler(w, &slog.HandlerOptions{Level: l}))
+	return slog.New(traceHandler{slog.NewJSONHandler(w, &slog.HandlerOptions{Level: l})})
+}
+
+type traceHandler struct{ slog.Handler }
+
+func (h traceHandler) Handle(ctx context.Context, r slog.Record) error {
+	var hasTrace, hasActor bool
+	r.Attrs(func(a slog.Attr) bool {
+		switch a.Key {
+		case "trace_id":
+			hasTrace = true
+		case "actor":
+			hasActor = true
+		}
+		return true
+	})
+	if sc := trace.SpanContextFromContext(ctx); sc.IsValid() && !hasTrace {
+		r.AddAttrs(slog.String("trace_id", sc.TraceID().String()), slog.String("span_id", sc.SpanID().String()))
+	}
+	if id, ok := actor.From(ctx); ok && !hasActor {
+		r.AddAttrs(slog.Int64("actor", id))
+	}
+	return h.Handler.Handle(ctx, r)
+}
+
+func (h traceHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return traceHandler{h.Handler.WithAttrs(attrs)}
+}
+
+func (h traceHandler) WithGroup(name string) slog.Handler {
+	return traceHandler{h.Handler.WithGroup(name)}
 }
 
 func InitTracer(ctx context.Context, serviceName string) (func(context.Context) error, error) {
@@ -93,15 +124,21 @@ func (w *statusWriter) WriteHeader(code int) {
 func Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+		ctx = actor.Track(ctx)
 		ctx, span := StartSpan(ctx, r.Method+" "+r.URL.Path,
-			attribute.String("http.method", r.Method),
-			attribute.String("http.route", r.URL.Path))
+			attribute.String("http.method", r.Method))
 		defer span.End()
 		if tp := Traceparent(ctx); tp != "" {
 			w.Header().Set("traceparent", tp)
 		}
 		rec := &statusWriter{ResponseWriter: w, status: http.StatusOK}
-		next.ServeHTTP(rec, r.WithContext(ctx))
+		r2 := r.WithContext(ctx)
+		next.ServeHTTP(rec, r2)
+		if r2.Pattern != "" {
+			span.SetName(r2.Pattern)
+			span.SetAttributes(attribute.String("http.route", r2.Pattern))
+		}
+		span.SetAttributes(attribute.Int("http.status_code", rec.status))
 		if rec.status >= http.StatusInternalServerError {
 			span.SetStatus(codes.Error, http.StatusText(rec.status))
 		}

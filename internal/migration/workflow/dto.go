@@ -88,6 +88,8 @@ type HistoryItemResponse struct {
 	ExecutedAt          time.Time `json:"executed_at"`
 	SQLExecuted         string    `json:"sql_executed"`
 	RevertedExecutionID *int64    `json:"reverted_execution_id"`
+	Attempt             int       `json:"attempt"`
+	ErrorMessage        string    `json:"error_message,omitempty"`
 }
 
 type ErrorBody struct {
@@ -126,5 +128,6 @@ func ToHistoryItem(h HistoryEntry) HistoryItemResponse {
 		DatabaseID: h.DatabaseID, RevisionNumber: h.RevisionNumber, ExecutionType: h.Kind,
 		Status: h.Status, ExecutedBy: h.ExecutedBy, ExecutedAt: h.ExecutedAt.UTC(),
 		SQLExecuted: h.SQLExecuted, RevertedExecutionID: h.RevertedExecutionID,
+		Attempt: h.Attempt, ErrorMessage: h.Error,
 	}
 }
