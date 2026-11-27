@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/migration/workflow"
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/obs/actor"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/queue"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -37,15 +38,21 @@ func newLogger(level string, w io.Writer) *slog.Logger {
 type traceHandler struct{ slog.Handler }
 
 func (h traceHandler) Handle(ctx context.Context, r slog.Record) error {
-	if sc := trace.SpanContextFromContext(ctx); sc.IsValid() {
-		has := false
-		r.Attrs(func(a slog.Attr) bool {
-			has = a.Key == "trace_id"
-			return !has
-		})
-		if !has {
-			r.AddAttrs(slog.String("trace_id", sc.TraceID().String()), slog.String("span_id", sc.SpanID().String()))
+	var hasTrace, hasActor bool
+	r.Attrs(func(a slog.Attr) bool {
+		switch a.Key {
+		case "trace_id":
+			hasTrace = true
+		case "actor":
+			hasActor = true
 		}
+		return true
+	})
+	if sc := trace.SpanContextFromContext(ctx); sc.IsValid() && !hasTrace {
+		r.AddAttrs(slog.String("trace_id", sc.TraceID().String()), slog.String("span_id", sc.SpanID().String()))
+	}
+	if id, ok := actor.From(ctx); ok && !hasActor {
+		r.AddAttrs(slog.Int64("actor", id))
 	}
 	return h.Handler.Handle(ctx, r)
 }
@@ -117,6 +124,7 @@ func (w *statusWriter) WriteHeader(code int) {
 func Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+		ctx = actor.Track(ctx)
 		ctx, span := StartSpan(ctx, r.Method+" "+r.URL.Path,
 			attribute.String("http.method", r.Method))
 		defer span.End()

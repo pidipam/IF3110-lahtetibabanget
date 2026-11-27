@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/obs/actor"
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/queue"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
@@ -99,5 +100,19 @@ func TestLoggerAddsTraceIDFromContext(t *testing.T) {
 	newLogger("info", &buf).Info("tanpa konteks")
 	if bytes.Contains(buf.Bytes(), []byte("trace_id")) {
 		t.Fatalf("log tanpa span tidak boleh punya trace_id: %s", buf.String())
+	}
+}
+
+func TestLoggerAddsActorFromContext(t *testing.T) {
+	var buf bytes.Buffer
+	ctx := actor.Set(context.Background(), 9)
+	newLogger("info", &buf).InfoContext(ctx, "halo")
+	if !bytes.Contains(buf.Bytes(), []byte(`"actor":9`)) {
+		t.Fatalf("log tanpa actor: %s", buf.String())
+	}
+	buf.Reset()
+	newLogger("info", &buf).InfoContext(ctx, "eksplisit", "actor", int64(3))
+	if bytes.Count(buf.Bytes(), []byte(`"actor"`)) != 1 || !bytes.Contains(buf.Bytes(), []byte(`"actor":3`)) {
+		t.Fatalf("actor eksplisit tidak boleh digandakan: %s", buf.String())
 	}
 }

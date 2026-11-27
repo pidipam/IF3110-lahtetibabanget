@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/pidipam/IF3110-lahtetibabanget/internal/migration/workflow"
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/obs/actor"
 )
 
 // Targets menyediakan pool ke database target (dbconn.Manager di aplikasi).
@@ -99,6 +100,7 @@ func (h *Handler) Handle(ctx context.Context, execID int64) error {
 		h.Log.InfoContext(ctx, "execution.duplicate", "event", "execution.duplicate", "execution", execID)
 		return nil
 	}
+	ctx = actor.Set(ctx, e.RequestedBy)
 	h.log(ctx, e, "execution.claimed", "previous_status", string(prev))
 
 	lctx, lsp := startSpan(ctx, "lock.acquire")

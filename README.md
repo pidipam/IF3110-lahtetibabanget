@@ -106,6 +106,10 @@ Setiap eksekusi migration harus disetujui leader dari setiap grup yang punya aks
 | `SESSION_ABSOLUTE_TIMEOUT` | `8h` | |
 | `SESSION_ROTATE_INTERVAL` | `15m` | |
 | `SESSION_GRACE_PERIOD` | `30s` | |
+| `WORKER_CONCURRENCY` | `4` | jumlah slot worker (job paralel untuk database berbeda) |
+| `WORKER_LEASE` | `30s` | lease job dan lock database; diperpanjang heartbeat tiap lease/3 |
+| `WORKER_MAX_ATTEMPTS` | `5` | batas retry kegagalan sementara |
+| `LOG_LEVEL` | `info` | `debug` juga mencatat setiap query ke platform DB |
 
 > Kunci enkripsi di Makefile hanya untuk development; untuk production buat kunci sendiri.
 > `APP_ENV=production` mewajibkan HTTPS (mis. lewat reverse proxy). Tanpa HTTPS browser tidak
@@ -156,7 +160,8 @@ query viewer yang read-only, `begin`, `commit`, `rollback`, batch, dan SQL migra
 | Platform DB (sesi, grant, antrean) | `DEBUG` | tampil dengan `LOG_LEVEL=debug`; query yang gagal selalu tampil di `WARN` |
 
 Atribut per query: `event=sql.query`, `db_target`, `query`, `params`, `duration_ms`, `rows`,
-`status`, dan untuk kegagalan `sqlstate` serta `error`. Literal kredensial di SQL (`PASSWORD '...'`,
+`status`, `actor` (id pengguna yang login, atau pengaju eksekusi di worker), dan untuk kegagalan
+`sqlstate` serta `error`. Literal kredensial di SQL (`PASSWORD '...'`,
 password di URL koneksi) disamarkan; parameter query yang menyentuh kolom password, token, sesi, atau
 hash ditulis sebagai `***`, dan byte mentah tidak pernah dicatat.
 
@@ -176,10 +181,12 @@ exporter console OpenTelemetry ke stdout.
 
 `make up` juga menjalankan satu worker (service `worker`). Worker ini memakai `network_mode: host`
 agar alamat koneksi target yang disimpan di platform (mis. `127.0.0.1:5435`) sama dengan yang dipakai
-server. Satu worker memproses satu job pada satu waktu; untuk menjalankan migration di beberapa
-database secara paralel, jalankan worker tambahan dengan `make run-worker` (jangan memakai
-`docker compose up --scale worker=N`, karena `WORKER_ID` di compose sama untuk semua replika). Image
-worker dibangun dari kode saat itu: setelah mengubah kode jalankan `docker compose build worker`.
+server. Satu proses worker menjalankan `WORKER_CONCURRENCY` slot (default 4), sehingga migration pada
+database yang berbeda berjalan paralel. Satu database tetap hanya menjalankan satu migration: lock per
+database dan klaim eksekusi berdasarkan status berlaku lintas slot maupun lintas proses, jadi worker
+tambahan (`make run-worker`) aman dijalankan bersamaan. Jangan memakai `docker compose up --scale
+worker=N` karena `WORKER_ID` di compose sama untuk semua replika. Image worker dibangun dari kode saat
+itu: setelah mengubah kode jalankan `docker compose build worker`.
 
 ### Stress testing k6 (bonus Vara)
 
