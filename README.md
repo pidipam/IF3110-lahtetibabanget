@@ -206,13 +206,24 @@ k6 run \
   scripts/k6/stress.js
 ```
 
+Tanpa k6 terpasang, jalankan lewat Docker (`--network host` agar `localhost` menunjuk ke server):
+
+```bash
+docker run --rm --network host -v "$PWD/scripts/k6:/scripts:ro" grafana/k6:0.54.0 run \
+  -e BASE_URL=http://localhost:8080 -e K6_USER=pengaju -e K6_LEADER=leader \
+  -e K6_PASSWORD='password-bersama' /scripts/stress.js
+```
+
 Variabel opsional: `K6_DB_A` dan `K6_DB_B` untuk memilih dua database secara eksplisit,
 `K6_USER_PASSWORD` dan `K6_LEADER_PASSWORD` bila password berbeda, `K6_STAGE_SECONDS` (default `30`)
-untuk durasi tiap level beban, dan `K6_JOB_TIMEOUT_SECONDS` (default `20`) untuk batas polling job.
+untuk durasi tiap level beban, `K6_JOB_TIMEOUT_SECONDS` (default `20`) untuk batas polling job, dan
+`K6_JOB_SQL` (default `SELECT pg_sleep(1)`) untuk SQL up migration uji.
 Tanpa `K6_DB_A`/`K6_DB_B`, script memilih dua database edit pertama yang terlihat oleh pengaju.
 
 `setup()` login sebagai pengaju dan leader, mengambil daftar database serta satu tabel dari tiap
-database, lalu membuat sembilan migration no-op (`SELECT 1`), mengirimkannya, dan menyetujuinya.
+database, lalu membuat sembilan migration yang tidak mengubah data (`SELECT pg_sleep(1)`, down
+`SELECT 1`), mengajukannya, dan menyetujuinya. Migration sengaja berjalan sekitar satu detik agar
+waktu tunggu antrean dan durasi job terukur.
 Indeks migration disimpan sebagai slot `SharedArray`; tiap job memakai kombinasi offset stage dan
 `exec.scenario.iterationInTest` sehingga tidak ada migration yang dipakai dua kali. SQL, user id,
 job id, dan URL tidak dipakai sebagai tag metrik; tag yang dipakai hanya `stage`, `op`, `db`,
@@ -230,10 +241,12 @@ menaikkan `jobs_success`.
 
 Metrik yang dicatat: p50/p95 `http_req_duration` dengan `op=api-read`, throughput `http_reqs`,
 `http_req_failed`, `job_queue_wait_ms`, `job_duration_ms`, `jobs_completed`, throughput job
-(dari `jobs_completed`), dan `jobs_success`. Ringkasan per stage tampil di stdout; bila
+(dari `jobs_completed`), dan `jobs_success`. Waktu tunggu antrean dihitung dari `queued_at` sampai
+`started_at` pada respons `GET /api/jobs/{id}` (presisi milidetik), durasi job dari `started_at`
+sampai `finished_at`. Ringkasan per stage tampil di stdout; bila
 `K6_SUMMARY_JSON` diisi, file tersebut berisi tabel yang sama plus data ringkasan mentah k6.
 
-Threshold awal (perlu dikalibrasi setelah baseline pertama):
+Threshold (dipilih dengan margin besar di atas baseline; seluruhnya lulus pada hasil di bawah):
 
 | Metrik | Threshold | Tujuan |
 |---|---|---|
@@ -248,31 +261,42 @@ Threshold awal (perlu dikalibrasi setelah baseline pertama):
 Script juga membuat sub-metrik per stage untuk p95 API, error rate, antrean, durasi job,
 throughput job, dan tingkat sukses, supaya tabel hasil bisa diisi langsung dari ringkasan.
 
-Hasil pengukuran belum tersedia di lingkungan ini karena `k6` tidak terpasang dan Docker daemon
-tidak aktif; angka di bawah bukan hasil pengujian dan harus diisi dari stdout/file ringkasan setelah
-script dijalankan pada lingkungan yang sudah siap.
+#### Hasil (27 November 2026)
+
+Lingkungan: satu mesin pengembangan (16 CPU), server dan worker dari `go build` dijalankan lokal
+(worker `WORKER_CONCURRENCY=4`), platform DB dan database target dari `docker compose`, k6 0.54.0 lewat
+Docker. Database A adalah `sample` dan database B adalah database kedua di server `target-db` yang
+berisi tabel 100 baris. Durasi tiap stage 30 detik. Semua threshold lulus (`exit 0`) dan seluruh 9
+job selesai `success`.
 
 | Stage | API VU | Job VU | p50 API (ms) | p95 API (ms) | API (req/s) | Error API | Queue p95 (ms) | Durasi job rata-rata (ms) | Job (/s) | Job sukses |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| baseline | 5 | 1 | - | - | - | - | - | - | - | - |
-| ramp-1 | 10 | 1 | - | - | - | - | - | - | - | - |
-| ramp-2 | 20 | 2 | - | - | - | - | - | - | - | - |
-| peak | 30 | 3 | - | - | - | - | - | - | - | - |
-| cool-down | 10 | 1 | - | - | - | - | - | - | - | - |
-| recovery | 5 | 1 | - | - | - | - | - | - | - | - |
+| baseline | 5 | 1 | 6.35 | 11.23 | 19.50 | 0 | 132 | 1015 | 0.03 | 100% |
+| ramp-1 | 10 | 1 | 6.63 | 11.51 | 39.00 | 0 | 119 | 1013 | 0.03 | 100% |
+| ramp-2 | 20 | 2 | 7.10 | 14.16 | 78.00 | 0 | 106 | 1009 | 0.07 | 100% |
+| peak | 30 | 3 | 6.78 | 12.05 | 117.03 | 0 | 4834 | 3260 | 0.10 | 100% |
+| cool-down | 10 | 1 | 6.91 | 11.79 | 39.00 | 0 | 134 | 1010 | 0.03 | 100% |
+| recovery | 5 | 1 | 6.12 | 9.82 | 19.50 | 0 | 129 | 1008 | 0.03 | 100% |
 
-Analisis per level beban dibaca dengan cara berikut:
+Analisis:
 
-- **baseline**: titik referensi untuk p95 API, error rate, dan queue wait; kalibrasi threshold bila
-  baseline sudah melebihi batas.
-- **ramp-1**: bandingkan p95 dan error API terhadap baseline; kenaikan kecil masih dapat diterima
-  bila throughput naik dan queue wait stabil.
-- **ramp-2**: perhatikan `job_queue_wait_ms`; bila naik lebih cepat daripada p95 API, bottleneck
-  ada pada worker atau lock database, bukan pada endpoint pembacaan.
-- **peak**: level penentu lulus/gagal threshold. `jobs_success` yang turun bersama `http_req_failed`
-  atau `job_submit_accepted` menandakan kegagalan submit/eksekusi, bukan sekadar antrean panjang.
-- **cool-down** dan **recovery**: metrik seharusnya kembali mendekati baseline. Bila tidak, ada
-  resource yang belum dilepas atau antrean yang masih menumpuk setelah beban diturunkan.
+- **baseline**: p95 API sekitar 11 ms, jauh di bawah threshold 500 ms. Waktu tunggu antrean ~130 ms
+  berasal dari interval polling worker (250 ms); durasi job ~1 detik sesuai `pg_sleep(1)`.
+- **ramp-1 dan ramp-2**: throughput API naik linear dengan jumlah VU (19.5 → 39 → 78 req/s) dan
+  p95 hanya naik dari 11 ms ke 14 ms. Dua job di ramp-2 berada di database A dan B, sehingga berjalan
+  paralel pada slot worker berbeda dan waktu tunggunya tetap ~100 ms.
+- **peak**: API tetap stabil (117 req/s, p95 12 ms, tanpa error), jadi endpoint pembacaan bukan
+  bottleneck. Kenaikan terjadi pada antrean: dua dari tiga job menuju database A, sedangkan satu
+  database hanya boleh menjalankan satu migration. Log worker menunjukkan migration yang urutannya
+  lebih akhir sempat diklaim lebih dulu; worker menahannya (`execution.waiting`) sampai migration
+  sebelumnya selesai, dan migration sebelumnya sempat ditunda 5 detik karena database sedang ditandai
+  sibuk. Hasilnya queue p95 4.8 detik dan durasi rata-rata 3.3 detik (durasi dihitung dari klaim
+  pertama), tetapi semua job tetap `success` dan urutan linear terjaga. Job di database B tidak ikut
+  menunggu. Queue p95 ini mendekati threshold 5 detik; bila beban job pada satu database lebih tinggi,
+  threshold perlu dinaikkan atau jeda penundaan saat database sibuk diperpendek.
+- **cool-down dan recovery**: semua metrik kembali ke nilai baseline (p95 API ~10 ms, antrean
+  ~130 ms, durasi ~1 detik), tidak ada error dan tidak ada job tertinggal. Sistem pulih segera
+  setelah beban turun.
 
 ## Cara pakai singkat
 

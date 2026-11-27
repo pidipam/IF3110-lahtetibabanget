@@ -421,7 +421,7 @@ func tp(t *time.Time) *string {
 	if t == nil {
 		return nil
 	}
-	s := iso(*t)
+	s := t.UTC().Format("2006-01-02T15:04:05.000Z07:00")
 	return &s
 }
 

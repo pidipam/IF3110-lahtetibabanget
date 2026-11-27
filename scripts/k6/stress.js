@@ -18,7 +18,8 @@ const JOB_TIMEOUT_SECONDS = Math.min(envInt('K6_JOB_TIMEOUT_SECONDS', 20, 1), ST
 const JOB_TIMEOUT_MS = JOB_TIMEOUT_SECONDS * 1000;
 const POLL_INTERVAL_SECONDS = 0.5;
 const API_THINK_SECONDS = 0.25;
-const STRESS_SQL = 'SELECT 1';
+const STRESS_SQL = __ENV.K6_JOB_SQL || 'SELECT pg_sleep(1)';
+const STRESS_SQL_DOWN = 'SELECT 1';
 
 const STAGES = [
     { name: 'baseline', apiVus: 5, jobVus: 1 },
@@ -30,6 +31,10 @@ const STAGES = [
 ];
 
 const STAGE_BY_NAME = {};
+
+function currentStage() {
+    return STAGE_BY_NAME[exec.scenario.name.replace(/_(api|job)$/, '')];
+}
 let jobOffset = 0;
 for (const stage of STAGES) {
     stage.jobOffset = jobOffset;
@@ -164,9 +169,22 @@ function cookieHeader(res) {
     return cookies.join('; ');
 }
 
+function noJar() {
+    return new http.CookieJar();
+}
+
 function login(username, password) {
+    const pre = http.get(BASE_URL + '/api/csrf', { headers: { Accept: 'application/json' }, jar: noJar(), tags: { stage: 'setup', op: 'login' } });
+    expectStatus(pre, 200, 'csrf ' + username);
+    const preBody = parseJSON(pre);
     const res = http.post(BASE_URL + '/api/login', JSON.stringify({ username: username, password: password }), {
-        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': preBody && preBody.csrf_token ? preBody.csrf_token : '',
+            Cookie: cookieHeader(pre),
+        },
+        jar: noJar(),
         tags: { stage: 'setup', op: 'login' },
     });
     expectStatus(res, 200, 'login ' + username);
@@ -194,13 +212,14 @@ function request(method, url, body, session, tags) {
     if (method !== 'GET' && session && session.csrf) {
         headers['X-CSRF-Token'] = session.csrf;
     }
-    const params = { headers: headers, tags: requestTags };
+    const params = { headers: headers, tags: requestTags, jar: noJar() };
     let res = http.request(method, url, body === null || body === undefined ? null : JSON.stringify(body), params);
     if (res.status === 403 && session) {
         const err = parseJSON(res);
         if (err && err.error && err.error.code === 'csrf_invalid') {
             const refresh = http.get(BASE_URL + '/api/csrf', {
                 headers: { Accept: 'application/json', Cookie: session.cookie },
+                jar: noJar(),
                 tags: Object.assign({}, requestTags, { op: 'csrf-refresh' }),
             });
             const refreshed = parseJSON(refresh);
@@ -286,7 +305,7 @@ function createMigrations(session, a, b) {
         const created = request('POST', BASE_URL + '/api/databases/' + db.id + '/migrations', {
             title: 'k6 stress ' + ('0' + (slot.index + 1)).slice(-2),
             sql_up: STRESS_SQL,
-            sql_down: '',
+            sql_down: STRESS_SQL_DOWN,
             is_irreversible: false,
             irreversible_reason: '',
             is_batch_mode: false,
@@ -347,8 +366,8 @@ export function setup() {
     return { submitter: { csrf: submitter.csrf, cookie: submitter.cookie }, dbs: databases, migrations: migrations };
 }
 
-function apiRead(data) {
-    const stage = STAGE_BY_NAME[exec.scenario.name];
+export function apiRead(data) {
+    const stage = currentStage();
     const iteration = exec.scenario.iterationInTest;
     const db = iteration % 2 === 0 ? data.dbs.a : data.dbs.b;
     const opIndex = iteration % 3;
@@ -394,8 +413,8 @@ function jobIDFrom(res) {
     return body && body.job_id ? String(body.job_id) : '';
 }
 
-function submitJob(data) {
-    const stage = STAGE_BY_NAME[exec.scenario.name];
+export function submitJob(data) {
+    const stage = currentStage();
     const iteration = exec.scenario.iterationInTest;
     if (iteration >= stage.jobVus) {
         sleep(1);
@@ -446,7 +465,11 @@ function submitJob(data) {
         const success = job.status === 'success';
         jobsCompleted.add(1, resultTags);
         jobsSuccess.add(success, resultTags);
-        const queueWait = firstRunningAt && acceptedAt ? firstRunningAt - acceptedAt : 0;
+        const queuedAtServer = job.queued_at ? Date.parse(job.queued_at) : 0;
+        const startedAtServer = job.started_at ? Date.parse(job.started_at) : 0;
+        const queueWait = queuedAtServer && startedAtServer && startedAtServer >= queuedAtServer
+            ? startedAtServer - queuedAtServer
+            : (firstRunningAt ? firstRunningAt - acceptedAt : 0);
         if (queueWait >= 0) {
             jobQueueWait.add(queueWait, resultTags);
         }
@@ -472,9 +495,9 @@ function findMetricExact(data, name, wanted) {
         const parts = key.slice(prefix.length, key.length - 1).split(',');
         const tags = {};
         for (const part of parts) {
-            const eq = part.indexOf('=');
-            if (eq > 0) {
-                tags[part.slice(0, eq)] = part.slice(eq + 1).replace(/^"|"$/g, '');
+            const sep = part.indexOf(':');
+            if (sep > 0) {
+                tags[part.slice(0, sep)] = part.slice(sep + 1).replace(/^"|"$/g, '');
             }
         }
         const keys = Object.keys(tags);
