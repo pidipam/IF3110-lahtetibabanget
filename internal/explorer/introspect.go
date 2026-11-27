@@ -45,6 +45,7 @@ FROM pg_constraint con
 JOIN pg_class c ON c.oid = con.conrelid
 JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE con.contype IN ('p','u','f','c') AND c.relkind IN ` + relkinds + ` AND ` + schemaFilter + `
+  AND pg_get_constraintdef(con.oid) IS NOT NULL
 ORDER BY n.nspname, c.relname, con.conname`
 
 	qIndexes = `SELECT n.nspname, t.relname, i.relname, pg_get_indexdef(ix.indexrelid), ix.indisunique, ix.indisprimary
@@ -53,6 +54,7 @@ JOIN pg_class i ON i.oid = ix.indexrelid
 JOIN pg_class t ON t.oid = ix.indrelid
 JOIN pg_namespace n ON n.oid = t.relnamespace
 WHERE t.relkind IN ` + relkinds + ` AND ` + schemaFilter + `
+  AND pg_get_indexdef(ix.indexrelid) IS NOT NULL
 ORDER BY n.nspname, t.relname, i.relname`
 )
 
