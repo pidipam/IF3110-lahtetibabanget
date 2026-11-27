@@ -91,6 +91,13 @@ export function HistoryPage() {
             key: "note",
             header: "Keterangan",
             render: (h) => {
+                if (h.status === "failed") {
+                    return (
+                        <span className="text-red-700">
+                            Gagal (percobaan {h.attempt ?? 1}){h.error_message ? `: ${h.error_message}` : ""}
+                        </span>
+                    );
+                }
                 if (h.reverted_execution_id) {
                     return (
                         <Link to={detail(h.reverted_execution_id)} className="text-indigo-700 hover:underline">
@@ -136,7 +143,7 @@ export function HistoryPage() {
                         caption="Riwayat eksekusi"
                         columns={columns}
                         rows={items}
-                        rowKey={(h) => h.execution_id}
+                        rowKey={(h) => `${h.execution_id}-${h.attempt ?? 0}`}
                         minWidth="52rem"
                         empty={<EmptyState title={hideRollback ? "Tidak ada eksekusi yang masih berlaku." : "Belum ada eksekusi."} description={hideRollback ? "Matikan Hide rollback untuk melihat semua eksekusi." : undefined} />}
                     />

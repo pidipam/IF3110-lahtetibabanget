@@ -77,7 +77,9 @@ func (h *Handler) locks() Locks { return Locks{Pool: h.Repo.Pool()} }
 
 func (h *Handler) log(ctx context.Context, e workflow.Execution, event string, args ...any) {
 	base := []any{"event", event, "database", e.DatabaseID, "migration", e.MigrationID, "execution", e.ID,
-		"revision", e.RevisionNumber, "kind", string(e.Kind), "attempt", e.Attempt, "job", e.JobID, "worker", h.WorkerID}
+		"revision", e.RevisionNumber, "kind", string(e.Kind), "attempt", e.Attempt, "job", e.JobID, "worker", h.WorkerID,
+		"actor", e.RequestedBy}
+	base = append(base, traceAttrs(ctx)...)
 	h.Log.InfoContext(ctx, event, append(base, args...)...)
 }
 
@@ -99,7 +101,9 @@ func (h *Handler) Handle(ctx context.Context, execID int64) error {
 	}
 	h.log(ctx, e, "execution.claimed", "previous_status", string(prev))
 
-	got, err := h.locks().Acquire(ctx, e.DatabaseID, e.ID, h.WorkerID, h.Lease)
+	lctx, lsp := startSpan(ctx, "lock.acquire")
+	got, err := h.locks().Acquire(lctx, e.DatabaseID, e.ID, h.WorkerID, h.Lease)
+	endSpan(lsp, err)
 	if err != nil {
 		_ = h.Repo.MarkOutcome(ctx, e.ID, prev, "gagal mengambil lock")
 		return err
@@ -121,7 +125,9 @@ func (h *Handler) Handle(ctx context.Context, execID int64) error {
 		})
 	}()
 	start := time.Now()
-	out := h.run(runCtx, e, prev)
+	rctx, rsp := startSpan(runCtx, "migration.run")
+	out := h.run(rctx, e, prev)
+	endSpan(rsp, out.err)
 	cancel()
 	<-hbDone
 	h.log(ctx, e, "execution.result", "class", out.class.String(), "duration_ms", time.Since(start).Milliseconds(),
@@ -145,6 +151,9 @@ func (h *Handler) defer_(ctx context.Context, id int64, d time.Duration) error {
 func (h *Handler) finalize(ctx context.Context, e workflow.Execution, prev workflow.Status, out outcome) error {
 	lk := h.locks()
 	msg := errString(out.err)
+	if out.class != Success && out.class != Uncertain {
+		h.recordFailure(ctx, e, out, msg)
+	}
 	switch out.class {
 	case Success:
 		if out.reverting && e.Kind != workflow.KindRollback {
@@ -161,6 +170,7 @@ func (h *Handler) finalize(ctx context.Context, e workflow.Execution, prev workf
 		h.log(ctx, e, "execution.committed")
 		return nil
 	case Uncertain:
+		// hasil belum pasti: belum dicatat ke history; dicatat saat resolusi (sukses/gagal)
 		_ = h.Repo.MarkOutcome(ctx, e.ID, workflow.StatusUncertain, msg)
 		_ = lk.Hold(ctx, e.DatabaseID, e.ID, "uncertain")
 		h.log(ctx, e, "execution.uncertain")
@@ -203,6 +213,25 @@ func (h *Handler) finalize(ctx context.Context, e workflow.Execution, prev workf
 		h.log(ctx, e, "execution.failed", "status", string(st))
 		return nil
 	}
+}
+
+// recordFailure mencatat attempt gagal ke migration history (spesifikasi v4). Kegagalan mencatat
+// tidak boleh membatalkan penanganan hasil; cukup dilog.
+func (h *Handler) recordFailure(ctx context.Context, e workflow.Execution, out outcome, msg string) {
+	sql := out.sql
+	if sql == "" {
+		if rev, err := h.Repo.GetRevision(ctx, e.MigrationID, e.RevisionNumber); err == nil {
+			sql = rev.SQLUp
+			if e.Kind == workflow.KindRollback {
+				sql = rev.SQLDown
+			}
+		}
+	}
+	if err := h.Repo.RecordFailedAttempt(ctx, e, sql, msg); err != nil {
+		h.Log.ErrorContext(ctx, "history.failure_record_error", "event", "history.failure_record_error", "execution", e.ID, "error", err.Error())
+		return
+	}
+	h.log(ctx, e, "history.failure_recorded", "sql", logSQL(sql), "error", msg)
 }
 
 func holdStatus(o outcome) workflow.Status {
@@ -324,12 +353,12 @@ func (h *Handler) runNormal(ctx context.Context, e workflow.Execution, rev workf
 		return outcome{class: Classify(err, StageRun), err: err}
 	}
 	rb := func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }
-	h.log(ctx, e, "sql.start")
+	h.log(ctx, e, "sql.start", "sql", logSQL(sql))
 	t0 := time.Now()
 	ct, err := tx.Exec(ctx, sql, pgx.QueryExecModeSimpleProtocol) // multi-statement
 	if err != nil {
 		rb()
-		h.log(ctx, e, "sql.rollback", "sqlstate", SQLState(err), "duration_ms", time.Since(t0).Milliseconds())
+		h.log(ctx, e, "sql.rollback", "sqlstate", SQLState(err), "error", errMsg(err), "duration_ms", time.Since(t0).Milliseconds())
 		return outcome{class: Classify(err, StageRun), err: fmt.Errorf("SQL gagal (SQLSTATE %s): %s", SQLState(err), errMsg(err))}
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO dbmp_meta.execution_marker (execution_id, kind) VALUES ($1,$2)

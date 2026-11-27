@@ -21,6 +21,9 @@ type Item struct {
 	Active bool
 	// EverRun: pernah sukses dijalankan (dipakai untuk membedakan up vs forward).
 	EverRun bool
+	// Failed: eksekusi terakhirnya gagal (belum aktif). Boleh dicoba lagi (forward/up)
+	// atau dilewati oleh migration lain (spesifikasi v4).
+	Failed bool
 }
 
 // NextInLine mengembalikan migration terdekat yang sudah diajukan dan belum aktif.
@@ -28,7 +31,7 @@ func NextInLine(items []Item) (Item, bool) {
 	var best Item
 	found := false
 	for _, it := range items {
-		if it.Order == 0 || it.Active {
+		if it.Order == 0 || it.Active || it.Failed {
 			continue
 		}
 		if !found || it.Order < best.Order {
@@ -77,7 +80,7 @@ func CheckRun(kind Kind, id int64, reversible bool, items []Item) error {
 			return ErrForwardNeedsUndo // sudah pernah jalan: gunakan forward
 		}
 		next, ok := NextInLine(items)
-		if !ok || next.ID != id {
+		if !target.Failed && (!ok || next.ID != id) {
 			return ErrNotNextInLine
 		}
 	case KindRollback:

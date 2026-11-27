@@ -40,7 +40,15 @@ func TestFailureRollsBackAndNoHistory(t *testing.T) {
 		t.Fatal("transaksi harus di-rollback seluruhnya")
 	}
 	if r.hist() != 0 || r.locks() != 0 {
-		t.Fatalf("tidak boleh ada history/lock: %d %d", r.hist(), r.locks())
+		t.Fatalf("tidak boleh ada history sukses/lock: %d %d", r.hist(), r.locks())
+	}
+	// v4: attempt gagal tetap tercatat di history lengkap dengan SQL, attempt, dan pesan error
+	var st, hsql, herr string
+	var hatt int
+	r.must(r.pool.QueryRow(r.ctx, `SELECT status, sql_executed, attempt, error_message FROM platform_migration_history
+		WHERE execution_id=$1`, id).Scan(&st, &hsql, &hatt, &herr))
+	if st != "failed" || hatt != 1 || !strings.Contains(hsql, "SELECT 1/0") || !strings.Contains(herr, "22012") {
+		t.Fatalf("attempt gagal harus tercatat: %s %d %q %q", st, hatt, hsql, herr)
 	}
 	// retry dicatat sebagai attempt baru
 	_, err := r.svc.Enqueue(r.ctx, r.uid, r.db, id)
@@ -171,8 +179,8 @@ func TestFailedRollbackKeepsPositionAndHidesNothing(t *testing.T) {
 		t.Fatalf("posisi aktif harus tetap: %+v", items)
 	}
 	hs, _ := r.svc.History(r.ctx, r.uid, r.db, true)
-	if len(hs) != 1 {
-		t.Fatalf("tidak ada yang disembunyikan: %d", len(hs))
+	if len(hs) != 2 || hs[1].Status != workflow.StatusFailed {
+		t.Fatalf("up sukses + rollback gagal tetap tampil, tidak ada yang disembunyikan: %d", len(hs))
 	}
 }
 
@@ -245,8 +253,8 @@ func TestRetryLimited(t *testing.T) {
 	if e := r.ex(id); e.Status != workflow.StatusFailed || e.Attempt != 3 {
 		t.Fatalf("setelah 3 attempt harus failed: %+v", e)
 	}
-	if r.hist() != 0 {
-		t.Fatal("tidak ada history")
+	if r.hist() != 0 || r.histFailed() != 3 {
+		t.Fatalf("tidak ada history sukses; 3 attempt gagal tercatat: %d/%d", r.hist(), r.histFailed())
 	}
 }
 
@@ -356,5 +364,39 @@ func TestUncertainHoldsNextMigration(t *testing.T) {
 	r.run(eb)
 	if e := r.ex(eb); e.Status != workflow.StatusQueued || e.Attempt != 0 {
 		t.Fatalf("B harus ditahan selama A uncertain: %+v", e)
+	}
+}
+
+// Spesifikasi v4: attempt gagal boleh di-forward lagi ATAU dilanjutkan dengan migration lain.
+func TestFailedMigrationDoesNotBlockNext(t *testing.T) {
+	r := newRig(t)
+	drop := func() { _, _ = r.pool.Exec(r.ctx, `DROP TABLE IF EXISTS zz_s, zz_t`) }
+	drop()
+	t.Cleanup(drop)
+	a := r.mig("A", "CREATE TABLE zz_s(id int); SELECT 1/0", "DROP TABLE zz_s")
+	b := r.mig("B", "CREATE TABLE zz_t(id int)", "DROP TABLE zz_t")
+	ea, err := r.svc.Submit(r.ctx, r.uid, r.db, a)
+	r.must(err)
+	eb, err := r.svc.Submit(r.ctx, r.uid, r.db, b)
+	r.must(err)
+	r.approveQueue(ea.ID)
+	r.run(ea.ID)
+	if r.ex(ea.ID).Status != workflow.StatusFailed {
+		t.Fatal("A harus failed")
+	}
+	r.approveQueue(eb.ID)
+	r.run(eb.ID) // dilanjutkan dengan migration lain
+	if r.ex(eb.ID).Status != workflow.StatusSuccess {
+		t.Fatalf("B harus boleh jalan setelah A gagal: %+v", r.ex(eb.ID))
+	}
+	if r.hist() != 1 || r.histFailed() != 1 {
+		t.Fatalf("history: 1 sukses (B) + 1 gagal (A): %d/%d", r.hist(), r.histFailed())
+	}
+	// A yang gagal tetap boleh dicoba lagi
+	_, err = r.svc.Enqueue(r.ctx, r.uid, r.db, ea.ID)
+	r.must(err)
+	r.run(ea.ID)
+	if r.histFailed() != 2 {
+		t.Fatalf("retry A gagal lagi harus tercatat sebagai attempt baru: %d", r.histFailed())
 	}
 }

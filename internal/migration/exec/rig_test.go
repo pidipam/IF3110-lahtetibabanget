@@ -112,8 +112,14 @@ func (r *rig) count(sql string, args ...any) int {
 	return n
 }
 
+// hist: jumlah attempt SUKSES di history (posisi/rollback hanya bergantung pada ini).
 func (r *rig) hist() int {
-	return r.count(`SELECT count(*) FROM platform_migration_history WHERE database_id=$1`, r.db)
+	return r.count(`SELECT count(*) FROM platform_migration_history WHERE database_id=$1 AND status='success'`, r.db)
+}
+
+// histFailed: jumlah attempt GAGAL di history (spesifikasi M2 v4: semua attempt tercatat).
+func (r *rig) histFailed() int {
+	return r.count(`SELECT count(*) FROM platform_migration_history WHERE database_id=$1 AND status='failed'`, r.db)
 }
 func (r *rig) locks() int { return r.count(`SELECT count(*) FROM platform_database_locks`) }
 func (r *rig) tableExists(n string) bool {

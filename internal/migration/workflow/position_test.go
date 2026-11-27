@@ -56,9 +56,9 @@ func TestCheckRun(t *testing.T) {
 		t.Fatalf("C belum aktif: %v", err)
 	}
 	// B di-rollback: B otomatis berikutnya, forward B sah, forward C tidak.
-	items := []Item{{1, 1, true, true}, {2, 2, false, true}, {3, 3, true, true}}
+	items := []Item{{1, 1, true, true, false}, {2, 2, false, true, false}, {3, 3, true, true, false}}
 	_ = items
-	items = []Item{{1, 1, true, true}, {2, 2, false, true}, {3, 3, false, true}}
+	items = []Item{{1, 1, true, true, false}, {2, 2, false, true, false}, {3, 3, false, true, false}}
 	if err := CheckRun(KindForward, 2, true, items); err != nil {
 		t.Fatalf("forward B: %v", err)
 	}
