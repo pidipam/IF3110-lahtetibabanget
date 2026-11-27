@@ -168,14 +168,46 @@ hash ditulis sebagai `***`, dan byte mentah tidak pernah dicatat.
 Query yang berjalan di dalam request API atau job worker membuat span `db.query` dan log-nya membawa
 `trace_id` serta `span_id`. Trace context ikut lewat antrean (kolom `traceparent` pada job), sehingga
 satu migration membentuk satu trace: `POST /api/migrations/{id}/execute` → `migration.execute`
-(worker) → `lock.acquire` → `migration.run` → `db.query`. Contoh log worker:
+(worker) → `lock.acquire` → `migration.run` → `db.query`.
+
+Contoh nyata dari pengujian k6 (satu trace `0b5dc5dd…`). Server menerima `execute` dan memasukkan job
+ke antrean dengan span `bace4ffc…`:
 
 ```json
-{"time":"2026-11-27T14:44:20Z","level":"INFO","msg":"sql.query","event":"sql.query","db_target":"target","query":"CREATE TABLE zz_e2e_obs(id int)","params":[],"duration_ms":0.688,"database":1,"trace_id":"5304c35bd8c9189f815e745d8f0a341b","span_id":"…","status":"ok","rows":0,"command":"CREATE TABLE"}
+{"time":"2026-11-27T22:13:47.499+07:00","level":"INFO","msg":"request","method":"POST","path":"/api/migrations/1/execute","status":202,"trace_id":"0b5dc5ddba1734ca63dcd192694cb72d","span_id":"bace4ffc4ccff94d","actor":2}
+{"time":"2026-11-27T22:13:47.499+07:00","level":"INFO","msg":"execution.enqueued","event":"execution.enqueued","database":1,"migration":1,"execution":1,"job":"2f9ec3dd-57a0-4d2b-b1d7-feba6e874602","trace_id":"0b5dc5ddba1734ca63dcd192694cb72d","span_id":"bace4ffc4ccff94d","actor":2}
 ```
 
-`trace_id` yang sama ada di header respons `traceparent` dari endpoint execute. Span dicetak oleh
-exporter console OpenTelemetry ke stdout.
+Worker melanjutkan trace yang sama dari kolom `traceparent` job. Rantai span: `migration.execute`
+(`6d45c102…`, induk `bace4ffc…` dari server) → `lock.acquire` (`4f369bb4…`) dan `migration.run`
+(`e9079b5a…`) → `db.query` (`e49bbb7d…`). Log query dan span-nya:
+
+```json
+{"time":"2026-11-27T22:13:48.640+07:00","level":"INFO","msg":"sql.query","event":"sql.query","db_target":"target","query":"SELECT pg_sleep(1)","params":[],"duration_ms":1001.389,"database":1,"trace_id":"0b5dc5ddba1734ca63dcd192694cb72d","span_id":"e49bbb7dc965eac9","status":"ok","rows":1,"command":"SELECT 1","actor":2}
+```
+
+```json
+{
+  "Name": "db.query",
+  "SpanContext": { "TraceID": "0b5dc5ddba1734ca63dcd192694cb72d", "SpanID": "e49bbb7dc965eac9" },
+  "Parent": { "TraceID": "0b5dc5ddba1734ca63dcd192694cb72d", "SpanID": "e9079b5a665a5bc2" },
+  "SpanKind": 3,
+  "StartTime": "2026-11-27T22:13:47.638936939+07:00",
+  "EndTime": "2026-11-27T22:13:48.640334342+07:00",
+  "Attributes": [
+    { "Key": "db.system", "Value": { "Type": "STRING", "Value": "postgresql" } },
+    { "Key": "db.target", "Value": { "Type": "STRING", "Value": "target" } },
+    { "Key": "db.connection_id", "Value": { "Type": "INT64", "Value": 1 } },
+    { "Key": "db.statement", "Value": { "Type": "STRING", "Value": "SELECT pg_sleep(1)" } },
+    { "Key": "db.rows", "Value": { "Type": "INT64", "Value": 1 } }
+  ],
+  "Status": { "Code": "Unset", "Description": "" }
+}
+```
+
+Span di atas dipersingkat (field resource dan instrumentation scope dihilangkan). Span dicetak oleh
+exporter console OpenTelemetry ke stdout; query yang gagal mendapat `Status.Code = Error` dengan
+SQLSTATE sebagai deskripsi.
 
 ### Worker di Docker Compose
 
@@ -297,6 +329,29 @@ Analisis:
 - **cool-down dan recovery**: semua metrik kembali ke nilai baseline (p95 API ~10 ms, antrean
   ~130 ms, durasi ~1 detik), tidak ada error dan tidak ada job tertinggal. Sistem pulih segera
   setelah beban turun.
+
+### Security: SAST dengan CodeQL (bonus)
+
+Workflow `.github/workflows/codeql.yml` menjalankan CodeQL untuk Go, JavaScript/TypeScript, dan
+GitHub Actions pada setiap push ke `main`, `main-milestone-2`, dan `feat/**`, pada pull request, dan
+terjadwal setiap Senin. Hasil scan terakhir (27 November 2026, `main-milestone-2` commit `d15d707` dan
+`feat/revision-migration` commit `7b7f31e`): Go 5 hasil (35 rule), JavaScript/TypeScript 0 hasil
+(103 rule), Actions 0 hasil (23 rule). Kelima hasil Go adalah alert yang sudah di-dismiss di bawah.
+
+Seluruh temuan (13 alert, semuanya rule `go/log-injection`, severity medium):
+
+| Alert | Lokasi | Potensi dampak | Keputusan | Alasan |
+|---|---|---|---|---|
+| #4, #6–#12 | `adminapi.go:234`, `app/app.go:139`, `app/errors.go:43`, `approvalapi.go:275`, `connectionapi.go:106`, `spaapi.go:147`, `sessionapi.go:150`, `viewerapi.go:118` | path request ditulis ke log; karakter baris baru di path dapat memalsukan baris log | **diperbaiki** (commit `7e8d187`) | path di-log lewat `httpapi.LogPath`, yang menghapus `\n` dan `\r`; diuji di `httpapi_test.go`. Alert tidak muncul lagi pada scan berikutnya |
+| #1, #2 | `adminapi/users.go:152` | nilai dari body request masuk log | **false positive** | nilai `is_admin`/`is_active` bertipe bool hasil decode JSON, tidak dapat berisi baris baru; log ditulis `slog` JSON yang meng-escape string |
+| #3, #5 | `adminapi/groups.go:444`, `:364` | id dari body request masuk log | **false positive** | nilai bertipe `int64` hasil decode JSON |
+| #13 | `explainapi/explainapi.go:119` | flag `analyze` dari body request masuk log | **false positive** | nilai bool hasil decode JSON |
+
+Catatan: log aplikasi seluruhnya memakai handler JSON `slog`, sehingga karakter kontrol pada string
+selalu di-escape dan tidak dapat membuat baris log baru. Scan bersih atau temuan yang di-dismiss tidak
+berarti aplikasi pasti aman; CodeQL hanya mencakup pola yang dikenali rule-nya. Branch
+`feat/wp8-vara-fixes` menambahkan log SQL (`internal/obs/sqltrace`); scan untuk branch tersebut
+berjalan otomatis setelah push dan temuannya perlu ditinjau dengan cara yang sama.
 
 ## Cara pakai singkat
 
