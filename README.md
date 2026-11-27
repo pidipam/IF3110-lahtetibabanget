@@ -125,6 +125,7 @@ Setiap eksekusi migration harus disetujui leader dari setiap grup yang punya aks
 | `WORKER_CONCURRENCY` | `4` | jumlah slot worker (job paralel untuk database berbeda) |
 | `WORKER_LEASE` | `30s` | lease job dan lock database; diperpanjang heartbeat tiap lease/3 |
 | `WORKER_MAX_ATTEMPTS` | `5` | batas retry kegagalan sementara |
+| `WORKER_DRAIN_TIMEOUT` | `30s` | saat SIGTERM/SIGINT, worker berhenti mengambil job baru dan menunggu job yang sedang berjalan selesai selama batas ini; bila terlewati, job dibatalkan dan dilanjutkan pemulihan |
 | `LOG_LEVEL` | `info` | `debug` juga mencatat setiap query ke platform DB |
 
 > Kunci enkripsi di Makefile hanya untuk development; untuk production buat kunci sendiri.
@@ -260,7 +261,10 @@ server. Satu proses worker menjalankan `WORKER_CONCURRENCY` slot (default 4), se
 database yang berbeda berjalan paralel. Satu database tetap hanya menjalankan satu migration: lock per
 database dan klaim eksekusi berdasarkan status berlaku lintas slot maupun lintas proses, jadi worker
 tambahan (`make run-worker`) aman dijalankan bersamaan. Jangan memakai `docker compose up --scale
-worker=N` karena `WORKER_ID` di compose sama untuk semua replika. Image worker dibangun dari kode saat
+worker=N` karena `WORKER_ID` di compose sama untuk semua replika. Saat dihentikan (`docker compose
+stop`, Ctrl+C, atau SIGTERM), worker menyelesaikan job yang sedang berjalan lebih dulu, dibatasi
+`WORKER_DRAIN_TIMEOUT`. Diuji: SIGTERM dikirim saat batch ke-10 dari 40; worker tidak mengambil job
+baru, menyelesaikan ke-40 batch pada percobaan yang sama, lalu keluar dengan kode 0. Image worker dibangun dari kode saat
 itu: setelah mengubah kode jalankan `docker compose build worker`.
 
 ### Stress testing k6 (bonus Vara)
@@ -346,32 +350,36 @@ job selesai `success`.
 
 | Stage | API VU | Job VU | p50 API (ms) | p95 API (ms) | API (req/s) | Error API | Queue p95 (ms) | Durasi job rata-rata (ms) | Job (/s) | Job sukses |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| baseline | 5 | 1 | 6.35 | 11.23 | 19.50 | 0 | 132 | 1015 | 0.03 | 100% |
-| ramp-1 | 10 | 1 | 6.63 | 11.51 | 39.00 | 0 | 119 | 1013 | 0.03 | 100% |
-| ramp-2 | 20 | 2 | 7.10 | 14.16 | 78.00 | 0 | 106 | 1009 | 0.07 | 100% |
-| peak | 30 | 3 | 6.78 | 12.05 | 117.03 | 0 | 4834 | 3260 | 0.10 | 100% |
-| cool-down | 10 | 1 | 6.91 | 11.79 | 39.00 | 0 | 134 | 1010 | 0.03 | 100% |
-| recovery | 5 | 1 | 6.12 | 9.82 | 19.50 | 0 | 129 | 1008 | 0.03 | 100% |
+| baseline | 5 | 1 | 7.94 | 15.83 | 19.33 | 0 | 11 | 1015 | 0.03 | 100% |
+| ramp-1 | 10 | 1 | 7.43 | 19.05 | 38.60 | 0 | 18 | 1017 | 0.03 | 100% |
+| ramp-2 | 20 | 2 | 7.14 | 19.58 | 77.33 | 0 | 248 | 1014 | 0.07 | 100% |
+| peak | 30 | 3 | 7.33 | 15.75 | 116.03 | 0 | 1171 | 2093 | 0.10 | 100% |
+| cool-down | 10 | 1 | 7.08 | 20.32 | 38.67 | 0 | 26 | 1008 | 0.03 | 100% |
+| recovery | 5 | 1 | 8.12 | 18.52 | 19.33 | 0 | 20 | 1008 | 0.03 | 100% |
 
 Analisis:
 
-- **baseline**: p95 API sekitar 11 ms, jauh di bawah threshold 500 ms. Waktu tunggu antrean ~130 ms
-  berasal dari interval polling worker (250 ms); durasi job ~1 detik sesuai `pg_sleep(1)`.
-- **ramp-1 dan ramp-2**: throughput API naik linear dengan jumlah VU (19.5 → 39 → 78 req/s) dan
-  p95 hanya naik dari 11 ms ke 14 ms. Dua job di ramp-2 berada di database A dan B, sehingga berjalan
-  paralel pada slot worker berbeda dan waktu tunggunya tetap ~100 ms.
-- **peak**: API tetap stabil (117 req/s, p95 12 ms, tanpa error), jadi endpoint pembacaan bukan
+- **baseline**: p95 API sekitar 16 ms, jauh di bawah threshold 500 ms. Waktu tunggu antrean
+  ~10 ms karena worker langsung mengambil job; durasi job ~1 detik sesuai `pg_sleep(1)`.
+- **ramp-1 dan ramp-2**: throughput API naik linear dengan jumlah VU (19 → 39 → 77 req/s) dan p95
+  tetap di bawah 20 ms. Dua job di ramp-2 berada di database A dan B, sehingga berjalan paralel pada
+  slot worker berbeda; waktu tunggu p95 ~250 ms berasal dari interval polling worker.
+- **peak**: API tetap stabil (116 req/s, p95 16 ms, tanpa error), jadi endpoint pembacaan bukan
   bottleneck. Kenaikan terjadi pada antrean: dua dari tiga job menuju database A, sedangkan satu
   database hanya boleh menjalankan satu migration. Log worker menunjukkan migration yang urutannya
-  lebih akhir sempat diklaim lebih dulu; worker menahannya (`execution.waiting`) sampai migration
-  sebelumnya selesai, dan migration sebelumnya sempat ditunda 5 detik karena database sedang ditandai
-  sibuk. Hasilnya queue p95 4.8 detik dan durasi rata-rata 3.3 detik (durasi dihitung dari klaim
-  pertama), tetapi semua job tetap `success` dan urutan linear terjaga. Job di database B tidak ikut
-  menunggu. Queue p95 ini mendekati threshold 5 detik; bila beban job pada satu database lebih tinggi,
-  threshold perlu dinaikkan atau jeda penundaan saat database sibuk diperpendek.
-- **cool-down dan recovery**: semua metrik kembali ke nilai baseline (p95 API ~10 ms, antrean
-  ~130 ms, durasi ~1 detik), tidak ada error dan tidak ada job tertinggal. Sistem pulih segera
-  setelah beban turun.
+  lebih akhir sempat diklaim lebih dulu; worker menahannya (`execution.waiting`, dicoba lagi setelah
+  3 detik) sementara migration sebelumnya yang sempat mendapati database sibuk dicoba lagi setelah
+  1 detik, berjalan, lalu disusul migration berikutnya. Hasilnya queue p95 1,2 detik dan durasi
+  rata-rata 2,1 detik (durasi dihitung dari klaim pertama); semua job `success`, urutan linear
+  terjaga, dan job di database B tidak ikut menunggu.
+- **cool-down dan recovery**: semua metrik kembali ke nilai baseline (p95 API <21 ms, antrean
+  <30 ms, durasi ~1 detik), tanpa error dan tanpa job tertinggal. Sistem pulih segera setelah beban
+  turun.
+
+Catatan: pengukuran sebelumnya dengan jeda tetap 5 detik untuk database sibuk menghasilkan queue p95
+4,8 detik pada stage peak, karena migration sebelumnya dan sesudahnya saling menunda dengan jeda
+yang sama. Jeda kini dibedakan (1 detik bila database sibuk, 3 detik bila belum giliran) sehingga
+migration yang lebih awal selalu menang pada percobaan berikutnya.
 
 ### Security: SAST dengan CodeQL (bonus)
 
