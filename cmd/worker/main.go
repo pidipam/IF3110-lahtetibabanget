@@ -123,6 +123,8 @@ func run(cfg config.Config, logger *slog.Logger) error {
 		slots = 1
 	}
 	logger.Info("worker berjalan", "worker", workerID, "concurrency", slots, "lease", lease.String(), "poll", poll.String())
+	jobCtx, cancelJobs := context.WithCancel(context.WithoutCancel(ctx))
+	defer cancelJobs()
 	var wg sync.WaitGroup
 	for i := 1; i <= slots; i++ {
 		id := fmt.Sprintf("%s/%d", workerID, i)
@@ -130,14 +132,33 @@ func run(cfg config.Config, logger *slog.Logger) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			runSlot(ctx, h, rawJobs, id, lease, poll, cfg.WorkerMaxAttempts, logger)
+			runSlot(ctx, jobCtx, h, rawJobs, id, lease, poll, cfg.WorkerMaxAttempts, logger)
 		}()
 	}
-	wg.Wait()
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+	}
+	drain := cfg.WorkerDrainTimeout
+	logger.Info("worker berhenti: menunggu job yang sedang berjalan", "event", "worker.draining", "timeout", drain.String())
+	select {
+	case <-done:
+		logger.Info("worker berhenti: semua job selesai", "event", "worker.drained")
+	case <-time.After(drain):
+		logger.Warn("worker berhenti: batas waktu habis, job dibatalkan dan akan dipulihkan", "event", "worker.drain_timeout")
+		cancelJobs()
+		<-done
+	}
 	return nil
 }
 
-func runSlot(ctx context.Context, handler *exec.Handler, jobs *queue.Store, slotID string, lease, poll time.Duration, maxAttempts int, logger *slog.Logger) {
+func runSlot(ctx, jobCtx context.Context, handler *exec.Handler, jobs *queue.Store, slotID string, lease, poll time.Duration, maxAttempts int, logger *slog.Logger) {
 	ticker := time.NewTicker(poll)
 	defer ticker.Stop()
 	for {
@@ -148,7 +169,7 @@ func runSlot(ctx context.Context, handler *exec.Handler, jobs *queue.Store, slot
 			}
 			logger.Error("claim job gagal", "worker", slotID, "error", err.Error())
 		} else if job != nil {
-			process(ctx, handler, jobs, job, slotID, lease, maxAttempts, logger)
+			process(jobCtx, handler, jobs, job, slotID, lease, maxAttempts, logger)
 			continue
 		}
 		select {

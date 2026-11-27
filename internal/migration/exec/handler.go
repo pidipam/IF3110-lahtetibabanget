@@ -75,7 +75,10 @@ type outcome struct {
 	wait      bool
 }
 
-const waitDelay = 2 * time.Second
+const (
+	waitDelay = 3 * time.Second
+	busyDelay = 1 * time.Second
+)
 
 func (h *Handler) locks() Locks { return Locks{Pool: h.Repo.Pool()} }
 
@@ -94,7 +97,7 @@ func (h *Handler) Handle(ctx context.Context, execID int64) error {
 	e, prev, ok, err := h.Repo.Claim(ctx, execID)
 	if errors.Is(err, workflow.ErrConflict) {
 		h.Log.InfoContext(ctx, "execution.deferred", "event", "execution.deferred", "execution", execID, "reason", "database busy")
-		return h.defer_(ctx, execID, 5*time.Second)
+		return h.defer_(ctx, execID, busyDelay)
 	}
 	if err != nil {
 		return err
@@ -116,7 +119,7 @@ func (h *Handler) Handle(ctx context.Context, execID int64) error {
 	if !got {
 		_ = h.Repo.MarkOutcome(ctx, e.ID, prev, "")
 		h.log(ctx, e, "lock.busy")
-		return h.defer_(ctx, e.ID, 5*time.Second)
+		return h.defer_(ctx, e.ID, busyDelay)
 	}
 	h.log(ctx, e, "lock.acquired")
 
