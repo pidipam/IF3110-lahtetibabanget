@@ -82,3 +82,22 @@ func TestMiddlewareMenyuntikTraceparent(t *testing.T) {
 		t.Fatalf("response traceparent: %q", got)
 	}
 }
+
+func TestLoggerAddsTraceIDFromContext(t *testing.T) {
+	useTraceContext()
+	var buf bytes.Buffer
+	ctx := ContextWithTraceparent(context.Background(), sampleTraceparent)
+	newLogger("info", &buf).With("event", "x").InfoContext(ctx, "halo")
+	var got map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["trace_id"] != "4bf92f3577b34da6a3ce929d0e0e4736" || got["span_id"] != "00f067aa0ba902b7" || got["event"] != "x" {
+		t.Fatalf("log tanpa trace_id/span_id: %v", got)
+	}
+	buf.Reset()
+	newLogger("info", &buf).Info("tanpa konteks")
+	if bytes.Contains(buf.Bytes(), []byte("trace_id")) {
+		t.Fatalf("log tanpa span tidak boleh punya trace_id: %s", buf.String())
+	}
+}

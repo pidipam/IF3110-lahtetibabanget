@@ -43,7 +43,7 @@ type App struct {
 	mux           *http.ServeMux
 	handler       http.Handler
 	migrationExec *migration.Executor
-	Approvals *approval.Service
+	Approvals     *approval.Service
 	Workflow      *workflow.Service
 	wfHandler     *exec.Handler
 	wfAPI         *spaapi.Handler
@@ -105,7 +105,7 @@ func (a *App) logRequests(next http.Handler) http.Handler {
 		start := time.Now()
 		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(sw, r)
-		a.Logger.Info("request", "method", r.Method, "path", httpapi.LogPath(r), "status", sw.status, "duration", time.Since(start))
+		a.Logger.InfoContext(r.Context(), "request", "method", r.Method, "path", httpapi.LogPath(r), "status", sw.status, "duration", time.Since(start))
 	})
 }
 

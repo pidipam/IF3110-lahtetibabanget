@@ -139,6 +139,43 @@ dengan `batch_column=id` dan `batch_size=50000`. Setelah target ini dijalankan, 
 sudah ada; test yang membuat ulang tabel itu harus menjatuhkannya terlebih dahulu atau memakai
 tabel yang sudah diisi.
 
+### Log SQL dan tracing
+
+Server dan worker menulis log JSON (`log/slog`) ke stdout. Setiap query PostgreSQL dicatat oleh
+`internal/obs/sqltrace` yang dipasang sebagai `pgx` tracer, sehingga tidak ada query yang terlewat:
+query viewer yang read-only, `begin`, `commit`, `rollback`, batch, dan SQL migration.
+
+| Pool | Level | Keterangan |
+|---|---|---|
+| Database target (koneksi) | `INFO` | selalu tampil; atribut `database` berisi id koneksi |
+| Platform DB (sesi, grant, antrean) | `DEBUG` | tampil dengan `LOG_LEVEL=debug`; query yang gagal selalu tampil di `WARN` |
+
+Atribut per query: `event=sql.query`, `db_target`, `query`, `params`, `duration_ms`, `rows`,
+`status`, dan untuk kegagalan `sqlstate` serta `error`. Literal kredensial di SQL (`PASSWORD '...'`,
+password di URL koneksi) disamarkan; parameter query yang menyentuh kolom password, token, sesi, atau
+hash ditulis sebagai `***`, dan byte mentah tidak pernah dicatat.
+
+Query yang berjalan di dalam request API atau job worker membuat span `db.query` dan log-nya membawa
+`trace_id` serta `span_id`. Trace context ikut lewat antrean (kolom `traceparent` pada job), sehingga
+satu migration membentuk satu trace: `POST /api/migrations/{id}/execute` → `migration.execute`
+(worker) → `lock.acquire` → `migration.run` → `db.query`. Contoh log worker:
+
+```json
+{"time":"2026-11-27T14:44:20Z","level":"INFO","msg":"sql.query","event":"sql.query","db_target":"target","query":"CREATE TABLE zz_e2e_obs(id int)","params":[],"duration_ms":0.688,"database":1,"trace_id":"5304c35bd8c9189f815e745d8f0a341b","span_id":"…","status":"ok","rows":0,"command":"CREATE TABLE"}
+```
+
+`trace_id` yang sama ada di header respons `traceparent` dari endpoint execute. Span dicetak oleh
+exporter console OpenTelemetry ke stdout.
+
+### Worker di Docker Compose
+
+`make up` juga menjalankan satu worker (service `worker`). Worker ini memakai `network_mode: host`
+agar alamat koneksi target yang disimpan di platform (mis. `127.0.0.1:5435`) sama dengan yang dipakai
+server. Satu worker memproses satu job pada satu waktu; untuk menjalankan migration di beberapa
+database secara paralel, jalankan worker tambahan dengan `make run-worker` (jangan memakai
+`docker compose up --scale worker=N`, karena `WORKER_ID` di compose sama untuk semua replika). Image
+worker dibangun dari kode saat itu: setelah mengubah kode jalankan `docker compose build worker`.
+
 ### Stress testing k6 (bonus Vara)
 
 Script `scripts/k6/stress.js` menguji API viewer dan alur submission job secara bersamaan. Jalankan

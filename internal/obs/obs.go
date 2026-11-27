@@ -31,7 +31,31 @@ func newLogger(level string, w io.Writer) *slog.Logger {
 	if err := l.UnmarshalText([]byte(level)); err != nil {
 		l = slog.LevelInfo
 	}
-	return slog.New(slog.NewJSONHandler(w, &slog.HandlerOptions{Level: l}))
+	return slog.New(traceHandler{slog.NewJSONHandler(w, &slog.HandlerOptions{Level: l})})
+}
+
+type traceHandler struct{ slog.Handler }
+
+func (h traceHandler) Handle(ctx context.Context, r slog.Record) error {
+	if sc := trace.SpanContextFromContext(ctx); sc.IsValid() {
+		has := false
+		r.Attrs(func(a slog.Attr) bool {
+			has = a.Key == "trace_id"
+			return !has
+		})
+		if !has {
+			r.AddAttrs(slog.String("trace_id", sc.TraceID().String()), slog.String("span_id", sc.SpanID().String()))
+		}
+	}
+	return h.Handler.Handle(ctx, r)
+}
+
+func (h traceHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return traceHandler{h.Handler.WithAttrs(attrs)}
+}
+
+func (h traceHandler) WithGroup(name string) slog.Handler {
+	return traceHandler{h.Handler.WithGroup(name)}
 }
 
 func InitTracer(ctx context.Context, serviceName string) (func(context.Context) error, error) {
@@ -94,14 +118,19 @@ func Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
 		ctx, span := StartSpan(ctx, r.Method+" "+r.URL.Path,
-			attribute.String("http.method", r.Method),
-			attribute.String("http.route", r.URL.Path))
+			attribute.String("http.method", r.Method))
 		defer span.End()
 		if tp := Traceparent(ctx); tp != "" {
 			w.Header().Set("traceparent", tp)
 		}
 		rec := &statusWriter{ResponseWriter: w, status: http.StatusOK}
-		next.ServeHTTP(rec, r.WithContext(ctx))
+		r2 := r.WithContext(ctx)
+		next.ServeHTTP(rec, r2)
+		if r2.Pattern != "" {
+			span.SetName(r2.Pattern)
+			span.SetAttributes(attribute.String("http.route", r2.Pattern))
+		}
+		span.SetAttributes(attribute.Int("http.status_code", rec.status))
 		if rec.status >= http.StatusInternalServerError {
 			span.SetStatus(codes.Error, http.StatusText(rec.status))
 		}

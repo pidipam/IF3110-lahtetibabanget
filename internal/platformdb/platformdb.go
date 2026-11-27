@@ -5,16 +5,24 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"sort"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/obs/sqltrace"
 )
 
 //go:embed migrations/*.sql
 var migrationFiles embed.FS
 
 func Connect(ctx context.Context, url string) (*pgxpool.Pool, error) {
-	pool, err := pgxpool.New(ctx, url)
+	cfg, err := pgxpool.ParseConfig(url)
+	if err != nil {
+		return nil, err
+	}
+	cfg.ConnConfig.Tracer = &sqltrace.Tracer{Target: "platform", Level: slog.LevelDebug}
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}

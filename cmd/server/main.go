@@ -23,6 +23,7 @@ import (
 func main() {
 	cfg := config.Load()
 	logger := obs.NewLogger(cfg.LogLevel)
+	slog.SetDefault(logger)
 	if err := run(cfg, logger); err != nil {
 		logger.Error("server stopped", "error", err.Error())
 		os.Exit(1)

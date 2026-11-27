@@ -4,11 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/pidipam/IF3110-lahtetibabanget/internal/obs/sqltrace"
 )
 
 var ErrManagerClosed = errors.New("manager koneksi sudah ditutup")
@@ -57,7 +60,7 @@ func (m *Manager) Get(ctx context.Context, id int64) (*pgxpool.Pool, error) {
 			return nil, ErrWrongEngine
 		}
 
-		pool, err := m.open(ctx, params)
+		pool, err := m.open(ctx, id, params)
 		if err != nil {
 			return nil, err
 		}
@@ -152,7 +155,7 @@ func (m *Manager) openSQL(ctx context.Context, p Params) (*sql.DB, error) {
 	return db, nil
 }
 
-func (m *Manager) open(ctx context.Context, p Params) (*pgxpool.Pool, error) {
+func (m *Manager) open(ctx context.Context, id int64, p Params) (*pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(p.DSN())
 	if err != nil {
 		return nil, &ConnError{Kind: KindOther, err: err}
@@ -161,6 +164,7 @@ func (m *Manager) open(ctx context.Context, p Params) (*pgxpool.Pool, error) {
 	cfg.MaxConnLifetime = 30 * time.Minute
 	cfg.MaxConnIdleTime = 5 * time.Minute
 	cfg.ConnConfig.ConnectTimeout = m.connectTimeout
+	cfg.ConnConfig.Tracer = &sqltrace.Tracer{Target: "target", DatabaseID: id, Level: slog.LevelInfo}
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
