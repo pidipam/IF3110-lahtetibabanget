@@ -582,6 +582,21 @@ internal/db           seed database sampel (PostgreSQL dan MariaDB)
 
 ## Tim
 
+### Milestone 2
+
+Pembagian mengikuti paket kerja (WP) pada dokumen pembagian tugas Milestone 2: satu domain dikerjakan
+dari ujung ke ujung oleh satu orang, frontend dibagi antara Helena dan Vara, dan jalur kritis
+eksekusi dipecah di antarmuka `Queue` agar Vara (antrean dan worker) dan Keisha (logika eksekusi)
+dapat bekerja paralel. WP1 (keputusan arsitektur, kontrak API, ADR) dikerjakan bersama.
+
+| Anggota | NIM | Paket kerja | Pembagian Tugas |
+|---|---|---|---|
+| Helena Kristela Sarhawa | 13524109 | WP1–WP6 | Kerangka SPA (Vite, React, TypeScript, Tailwind, router, klien API dengan CSRF, layout responsif, komponen dasar); API sesi dan admin (login, logout, `GET /api/me`, user, grup, anggota, leader, akses); SPA login, user, grup, leader, dan akses grup; alur persetujuan (leader per grup, approver wajib, approve dan reject, pembatalan saat revisi berubah, aksi authz); SPA migration (editor, review, riwayat dan Hide rollback, monitor job, aksi rollback, forward, retry, resume, cancel); Bonus SAST CodeQL |
+| Vara Azzara Ramli Pulukadang | 13524091 | WP1, WP7–WP11 | Antrean dan worker (`internal/queue`, `cmd/worker`: publish, klaim, retry dengan jeda, dedup, lease dan heartbeat, tahan restart, shutdown rapi, slot paralel); log JSON dan tracing OpenTelemetry (`internal/obs`: ID korelasi, actor, penyamaran, log setiap query SQL, propagasi trace lewat job); API koneksi, database, explorer, dan viewer; SPA koneksi, daftar database, schema dan viewer, kotak masuk persetujuan; data uji besar (`make seed-large`) dan service worker di compose; Bonus stress testing k6 |
+| Keisha Rizka Syofyani | 13524073 | WP1, WP12–WP16 | Model dan API migration (revisi up dan down, irreversible, validasi, alur status Draft sampai Success/Failed); handler eksekusi di worker (lock, revalidasi, eksekusi normal, commit dan rollback, riwayat semua attempt, rollback dan forward); mode batch (kursor, checkpoint di `dbmp_meta`, status partial, resume, kompensasi urutan terbalik); konkurensi dan kegagalan (lock berlease lintas worker, penahanan saat partial atau uncertain, bukti eksekusi sebelum retry, pemulihan); riwayat dan Hide rollback beserta API |
+
+### Milestone 1
+
 | Anggota | NIM | Pembagian Tugas |
 |---|---|---|
 | Helena Kristela Sarhawa | 13524109 | Access Control, Autentikasi, Sesi, Otorisasi, Manajemen User & Grup, Bonus EXPLAIN / EXPLAIN ANALYZE |
