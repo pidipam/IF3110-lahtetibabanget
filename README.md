@@ -139,6 +139,92 @@ dengan `batch_column=id` dan `batch_size=50000`. Setelah target ini dijalankan, 
 sudah ada; test yang membuat ulang tabel itu harus menjatuhkannya terlebih dahulu atau memakai
 tabel yang sudah diisi.
 
+### Stress testing k6 (bonus Vara)
+
+Script `scripts/k6/stress.js` menguji API viewer dan alur submission job secara bersamaan. Jalankan
+server dan worker terlebih dahulu (`make run` dan `make run-worker`, dengan Docker sudah aktif untuk
+database target). Siapkan dua koneksi database yang sama-sama punya akses **View + Edit** untuk
+pengaju dan leader, serta minimal satu tabel pada masing-masing database. Pengaju dan leader harus
+berbeda karena pengaju tidak boleh menyetujui permintaannya sendiri.
+
+```bash
+k6 run \
+  -e BASE_URL=http://localhost:8080 \
+  -e K6_USER=pengaju \
+  -e K6_LEADER=leader \
+  -e K6_PASSWORD='password-bersama' \
+  -e K6_SUMMARY_JSON=summary.json \
+  scripts/k6/stress.js
+```
+
+Variabel opsional: `K6_DB_A` dan `K6_DB_B` untuk memilih dua database secara eksplisit,
+`K6_USER_PASSWORD` dan `K6_LEADER_PASSWORD` bila password berbeda, `K6_STAGE_SECONDS` (default `30`)
+untuk durasi tiap level beban, dan `K6_JOB_TIMEOUT_SECONDS` (default `20`) untuk batas polling job.
+Tanpa `K6_DB_A`/`K6_DB_B`, script memilih dua database edit pertama yang terlihat oleh pengaju.
+
+`setup()` login sebagai pengaju dan leader, mengambil daftar database serta satu tabel dari tiap
+database, lalu membuat sembilan migration no-op (`SELECT 1`), mengirimkannya, dan menyetujuinya.
+Indeks migration disimpan sebagai slot `SharedArray`; tiap job memakai kombinasi offset stage dan
+`exec.scenario.iterationInTest` sehingga tidak ada migration yang dipakai dua kali. SQL, user id,
+job id, dan URL tidak dipakai sebagai tag metrik; tag yang dipakai hanya `stage`, `op`, `db`,
+`status`, dan `name`.
+
+Skenario memakai `constant-vus` untuk pembacaan API dan submission job pada enam level beban:
+baseline (5 API + 1 job), ramp-1 (10 + 1), ramp-2 (20 + 2), peak (30 + 3), cool-down (10 + 1), dan
+recovery (5 + 1). Pembacaan bergiliran di database A dan B serta tiga endpoint (`/api/databases`,
+detail database, dan halaman tabel). Submission job juga bergiliran di database A dan B, sehingga
+beban API dan job menguji database yang sama maupun berbeda. Setiap `POST /execute` harus balas
+`202` dengan `job_id`; status `202` hanya dihitung sebagai job diterima, bukan sebagai eksekusi
+berhasil. Job dipolling tiap 500 ms sampai status terminal (`success`, `failed`, `partial`,
+`uncertain`, `partially_reverted`, atau `cancelled`) atau timeout. Hanya status `success` yang
+menaikkan `jobs_success`.
+
+Metrik yang dicatat: p50/p95 `http_req_duration` dengan `op=api-read`, throughput `http_reqs`,
+`http_req_failed`, `job_queue_wait_ms`, `job_duration_ms`, `jobs_completed`, throughput job
+(dari `jobs_completed`), dan `jobs_success`. Ringkasan per stage tampil di stdout; bila
+`K6_SUMMARY_JSON` diisi, file tersebut berisi tabel yang sama plus data ringkasan mentah k6.
+
+Threshold awal (perlu dikalibrasi setelah baseline pertama):
+
+| Metrik | Threshold | Tujuan |
+|---|---|---|
+| `http_req_duration` | `p(95)<800` | batas latensi seluruh request |
+| `http_req_duration{op:api-read}` | `p(95)<500` | batas p95 pembacaan API |
+| `http_req_failed` | `rate<0.01` | batas error HTTP global |
+| `http_req_failed{op:api-read}` | `rate<0.01` | batas error pembacaan API |
+| `job_submit_accepted` | `rate>0.95` | sebagian besar submit mendapat `202` |
+| `job_queue_wait_ms` | `p(95)<5000` | antrean tidak menumpuk |
+| `jobs_success` | `rate>0.95` | sebagian besar job mencapai `success` |
+
+Script juga membuat sub-metrik per stage untuk p95 API, error rate, antrean, durasi job,
+throughput job, dan tingkat sukses, supaya tabel hasil bisa diisi langsung dari ringkasan.
+
+Hasil pengukuran belum tersedia di lingkungan ini karena `k6` tidak terpasang dan Docker daemon
+tidak aktif; angka di bawah bukan hasil pengujian dan harus diisi dari stdout/file ringkasan setelah
+script dijalankan pada lingkungan yang sudah siap.
+
+| Stage | API VU | Job VU | p50 API (ms) | p95 API (ms) | API (req/s) | Error API | Queue p95 (ms) | Durasi job rata-rata (ms) | Job (/s) | Job sukses |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| baseline | 5 | 1 | - | - | - | - | - | - | - | - |
+| ramp-1 | 10 | 1 | - | - | - | - | - | - | - | - |
+| ramp-2 | 20 | 2 | - | - | - | - | - | - | - | - |
+| peak | 30 | 3 | - | - | - | - | - | - | - | - |
+| cool-down | 10 | 1 | - | - | - | - | - | - | - | - |
+| recovery | 5 | 1 | - | - | - | - | - | - | - | - |
+
+Analisis per level beban dibaca dengan cara berikut:
+
+- **baseline**: titik referensi untuk p95 API, error rate, dan queue wait; kalibrasi threshold bila
+  baseline sudah melebihi batas.
+- **ramp-1**: bandingkan p95 dan error API terhadap baseline; kenaikan kecil masih dapat diterima
+  bila throughput naik dan queue wait stabil.
+- **ramp-2**: perhatikan `job_queue_wait_ms`; bila naik lebih cepat daripada p95 API, bottleneck
+  ada pada worker atau lock database, bukan pada endpoint pembacaan.
+- **peak**: level penentu lulus/gagal threshold. `jobs_success` yang turun bersama `http_req_failed`
+  atau `job_submit_accepted` menandakan kegagalan submit/eksekusi, bukan sekadar antrean panjang.
+- **cool-down** dan **recovery**: metrik seharusnya kembali mendekati baseline. Bila tidak, ada
+  resource yang belum dilepas atau antrean yang masih menumpuk setelah beban diturunkan.
+
 ## Cara pakai singkat
 
 1. **Admin**: Koneksi -> tambah koneksi (pilih engine) -> Grup -> buat grup dan anggota -> atur akses database grup.
