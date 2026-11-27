@@ -92,19 +92,39 @@ func introspect(ctx context.Context, q Querier) (*Catalog, error) {
 	}
 	cons, err := collect(ctx, q, qConstraints, func(r pgx.Rows) (rawConstraint, error) {
 		var c rawConstraint
-		return c, r.Scan(&c.Schema, &c.Table, &c.Name, &c.Contype, &c.Def, &c.Columns)
+		var def *string
+		err := r.Scan(&c.Schema, &c.Table, &c.Name, &c.Contype, &def, &c.Columns)
+		if def != nil {
+			c.Def = *def
+		}
+		return c, err
 	})
 	if err != nil {
 		return nil, err
 	}
 	idxs, err := collect(ctx, q, qIndexes, func(r pgx.Rows) (rawIndex, error) {
 		var i rawIndex
-		return i, r.Scan(&i.Schema, &i.Table, &i.Name, &i.Def, &i.Unique, &i.Primary)
+		var def *string
+		err := r.Scan(&i.Schema, &i.Table, &i.Name, &def, &i.Unique, &i.Primary)
+		if def != nil {
+			i.Def = *def
+		}
+		return i, err
 	})
 	if err != nil {
 		return nil, err
 	}
-	return assemble(schemas, tables, cols, cons, idxs), nil
+	return assemble(schemas, tables, cols, withDef(cons, func(c rawConstraint) string { return c.Def }), withDef(idxs, func(i rawIndex) string { return i.Def })), nil
+}
+
+func withDef[T any](items []T, def func(T) string) []T {
+	out := items[:0]
+	for _, it := range items {
+		if def(it) != "" {
+			out = append(out, it)
+		}
+	}
+	return out
 }
 
 func collect[T any](ctx context.Context, q Querier, sql string, scan func(pgx.Rows) (T, error)) ([]T, error) {
